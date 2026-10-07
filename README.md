@@ -5,6 +5,8 @@ background, a stack of album covers flips forward one record at a time, and the 
 (song, artist, album, year, producer…) slide in underneath — then export a 9:16 or 3:4 MP4
 ready for Instagram.
 
+**Live app: https://markdo27.github.io/covervinyl/**
+
 Everything runs in the browser. Files are never uploaded anywhere.
 
 ## How it works
@@ -57,8 +59,13 @@ npm run build      # static site in dist/
 ```
 
 The build is a static site with relative asset paths, so `dist/` can be hosted anywhere.
-`.github/workflows/deploy.yml` publishes it to GitHub Pages on every push to `main`
-(enable it under *Settings → Pages → Source: GitHub Actions*).
+
+### Deployment
+
+`.github/workflows/deploy.yml` runs the tests, builds the app and publishes `dist/` to the
+`gh-pages` branch on every push to `main` (it can also be started by hand from the Actions
+tab). GitHub Pages serves that branch — if the site isn't live yet, open
+*Settings → Pages* and set *Source: Deploy from a branch → `gh-pages` / `(root)`*.
 
 ### Code map
 
