@@ -14,6 +14,7 @@ export function newSection(mode: TextSection['mode'], existing: TextSection[]): 
     text: '',
     scale: 1,
     gap: existing.length ? 1 : 0,
+    color: null,
   };
 }
 

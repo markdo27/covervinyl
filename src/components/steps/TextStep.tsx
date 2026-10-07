@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { morphSection, newSection } from '../../engine/sections';
 import type { ImageAsset, Project, Slide, TextSection } from '../../engine/types';
 import { MarkupEditor } from '../MarkupEditor';
-import { Section, Slider, Toggle } from '../ui';
+import { ColorField, Section, Slider, Toggle } from '../ui';
 
 interface Props {
   project: Project;
@@ -68,9 +68,17 @@ export function TextStep({ project, update, images, activeSlide, onSelectSlide }
 
   return (
     <Section step={3} title="Text" subtitle="Add, remove and edit the text under the covers">
+      <ColorField
+        label="Text colour (default for every section)"
+        value={t.color}
+        fallback="#ffffff"
+        onChange={(color) => set({ color: color ?? '#ffffff' })}
+      />
+
       <div className="markup-help">
         <code>**bold**</code> <code>*italic*</code> <code>~light~</code> <code># headline</code>
-        <span>Select text and use the buttons, or type the markers.</span>
+        <code>{'{#e2402f}colour{/}'}</code>
+        <span>Select text and use the buttons — the coloured “A” colours just the selected words.</span>
       </div>
 
       {project.sections.length === 0 && (
@@ -200,6 +208,13 @@ export function TextStep({ project, update, images, activeSlide, onSelectSlide }
               onChange={(gap) => setSection(section.id, { gap })}
             />
           </div>
+          <ColorField
+            label="Colour"
+            value={section.color}
+            fallback={t.color}
+            defaultLabel="Default"
+            onChange={(color) => setSection(section.id, { color })}
+          />
         </div>
       ))}
 
@@ -223,11 +238,7 @@ export function TextStep({ project, update, images, activeSlide, onSelectSlide }
             <Slider label="Line height" value={t.lineHeight} min={0.9} max={2} step={0.01} format={(x) => x.toFixed(2)} onChange={(lineHeight) => set({ lineHeight })} />
             <Slider label="Letter spacing" value={t.tracking} min={-0.08} max={0.2} step={0.005} format={(x) => `${(x * 100).toFixed(1)}%`} onChange={(tracking) => set({ tracking })} />
           </div>
-          <div className="toggles inline">
-            <label className="color-field">
-              <input type="color" value={t.color} onChange={(e) => set({ color: e.target.value })} />
-              <span>Text colour</span>
-            </label>
+          <div className="toggles">
             <Toggle label="Soft shadow" checked={t.shadow} onChange={(shadow) => set({ shadow })} />
           </div>
         </>

@@ -35,6 +35,8 @@ export interface TextSection {
   scale: number;
   /** Space above the section, in body line heights. */
   gap: number;
+  /** Text colour for this section, or null to use the default text colour. */
+  color: string | null;
 }
 
 export interface PostSettings {
@@ -115,6 +117,8 @@ export interface EndCard {
   logoId: string | null;
   /** Logo width as a fraction of canvas width. */
   logoSize: number;
+  /** Recolours the logo's visible pixels with this colour; null keeps its original colours. */
+  logoColor: string | null;
   text: string;
   duration: number;
 }

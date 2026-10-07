@@ -241,6 +241,10 @@ function morphProgress(f: Frame, i: number, t: number): number {
   return clamp01((t - start) / Math.max(0.05, f.p.motion.morphDuration));
 }
 
+function sectionColor(f: Frame, section: TextSection): string {
+  return section.color ?? f.p.text.color;
+}
+
 function sectionStyle(f: Frame, section: TextSection): TextMetricsStyle {
   if (section.scale === 1) return f.style;
   return { ...f.style, bodyPx: f.style.bodyPx * section.scale, headlinePx: f.style.headlinePx * section.scale };
@@ -305,7 +309,8 @@ function drawSlideText(f: Frame, alpha: number): void {
         if (e >= 1) continue;
         const dy = -easeInCubic(e) * f.bodyLine * 1.1;
         const smear = easeInCubic(e) * f.bodyLine * 0.7;
-        drawLine(f, line, f.baseX, f.textTop + tops[s] + line.top + dy, alpha * (1 - easeOutCubic(e)), 0, smear);
+        const fade = alpha * (1 - easeOutCubic(e));
+        drawLine(f, line, f.baseX, f.textTop + tops[s] + line.top + dy, fade, 0, smear, sectionColor(f, section));
       }
     });
   }
@@ -317,17 +322,18 @@ function drawSlideText(f: Frame, alpha: number): void {
   p.sections.forEach((section, s) => {
     if (section.mode !== 'slide') return;
     const style = sectionStyle(f, section);
+    const color = sectionColor(f, section);
     const top = f.textTop + tops[s];
     const morphing = section.id === f.morphId && slide.morphFrom.trim() !== '';
     if (morphing && mu > 0 && mu < 1) {
-      drawMorph(f, slide.morphFrom, sectionMarkup(section, slide), style, top, mu, alpha);
+      drawMorph(f, slide.morphFrom, sectionMarkup(section, slide), style, top, mu, alpha, color);
       return;
     }
     const markup = morphing && mu <= 0 ? slide.morphFrom : sectionMarkup(section, slide);
     for (const line of block(f, markup, style).lines) {
       const lineIndex = k++;
       if (idx === 0) {
-        drawLine(f, line, f.baseX, top + line.top, alpha, 0, 0);
+        drawLine(f, line, f.baseX, top + line.top, alpha, 0, 0, color);
         continue;
       }
       const v = clamp01((local - d * 0.3 - lineIndex * stagger) / (d * 0.75));
@@ -335,7 +341,7 @@ function drawSlideText(f: Frame, alpha: number): void {
       const eased = easeOutExpo(v);
       const dy = (1 - eased) * f.bodyLine * 1.3;
       const smear = (1 - eased) * f.bodyLine * 0.9;
-      drawLine(f, line, f.baseX, top + line.top + dy, alpha * easeOutCubic(v), 0, smear);
+      drawLine(f, line, f.baseX, top + line.top + dy, alpha * easeOutCubic(v), 0, smear, color);
     }
   });
 
@@ -345,7 +351,7 @@ function drawSlideText(f: Frame, alpha: number): void {
     const b = block(f, section.text, sectionStyle(f, section));
     const y = f.textTop + glidingTop(f, s, t);
     const smear = Math.min(f.bodyLine, Math.abs(y - (f.textTop + glidingTop(f, s, t - 1 / 60))) * 2.5);
-    for (const line of b.lines) drawLine(f, line, f.baseX, y + line.top, alpha, 0, smear);
+    for (const line of b.lines) drawLine(f, line, f.baseX, y + line.top, alpha, 0, smear, sectionColor(f, section));
   });
 }
 
@@ -357,6 +363,7 @@ function drawMorph(
   oy: number,
   mu: number,
   alpha: number,
+  color: string,
 ): void {
   const { ctx } = f;
   const from = cachedGlyphs(ctx, fromMarkup, style, f.maxTextWidth);
@@ -374,11 +381,19 @@ function drawMorph(
   setTextStyle(f);
 
   for (const [a, b] of plan.matched) {
-    drawGlyph(ctx, b, ox + lerp(a.x, b.x, eased), oy + lerp(a.y, b.y, eased), alpha, 0);
+    drawGlyph(ctx, b, ox + lerp(a.x, b.x, eased), oy + lerp(a.y, b.y, eased), alpha, 0, color);
   }
   const outT = clamp01(mu * 2.2);
   for (const g of plan.removed) {
-    drawGlyph(ctx, g, ox + g.x, oy + g.y - outT * f.bodyLine * 0.3, alpha * (1 - easeOutCubic(outT)), outT * f.bodyLine * 0.5);
+    drawGlyph(
+      ctx,
+      g,
+      ox + g.x,
+      oy + g.y - outT * f.bodyLine * 0.3,
+      alpha * (1 - easeOutCubic(outT)),
+      outT * f.bodyLine * 0.5,
+      color,
+    );
   }
   const n = plan.added.length;
   plan.added.forEach((g, k) => {
@@ -386,14 +401,13 @@ function drawMorph(
     const v = clamp01((mu - 0.1 - start) / 0.5);
     if (v <= 0) return;
     const smear = (1 - easeOutCubic(v)) * f.bodyLine * 0.8;
-    drawGlyph(ctx, g, ox + g.x, oy + g.y, alpha * easeOutCubic(v), smear, true);
+    drawGlyph(ctx, g, ox + g.x, oy + g.y, alpha * easeOutCubic(v), smear, color, true);
   });
   ctx.shadowColor = 'transparent';
 }
 
 function setTextStyle(f: Frame): void {
   const { ctx, p, W } = f;
-  ctx.fillStyle = p.text.color;
   if (p.text.shadow) {
     ctx.shadowColor = 'rgba(0,0,0,0.4)';
     ctx.shadowBlur = W * 0.012;
@@ -410,7 +424,16 @@ function smearCopies(smear: number, alpha: number, W: number): { n: number; a: n
   return { n, a: n === 1 ? alpha : 1 - Math.pow(1 - Math.min(alpha, 0.999), 1 / n) };
 }
 
-function drawLine(f: Frame, line: PlacedLine, x: number, top: number, alpha: number, smearX: number, smearY: number) {
+function drawLine(
+  f: Frame,
+  line: PlacedLine,
+  x: number,
+  top: number,
+  alpha: number,
+  smearX: number,
+  smearY: number,
+  color = f.p.text.color,
+) {
   if (alpha <= 0.003 || !line.runs.length) return;
   const { ctx, W } = f;
   setTextStyle(f);
@@ -421,6 +444,7 @@ function drawLine(f: Frame, line: PlacedLine, x: number, top: number, alpha: num
     const k = n === 1 ? 0 : c / (n - 1) - 0.5;
     for (const run of line.runs) {
       ctx.font = run.font;
+      ctx.fillStyle = run.color ?? color;
       if ('letterSpacing' in ctx) ctx.letterSpacing = run.letterSpacing;
       ctx.fillText(run.text, x + run.x + k * smearX, cy + k * smearY);
     }
@@ -436,11 +460,13 @@ function drawGlyph(
   y: number,
   alpha: number,
   smear: number,
+  color: string,
   horizontal = false,
 ) {
   if (alpha <= 0.003) return;
   const { n, a } = smearCopies(smear, alpha, ctx.canvas.width);
   ctx.font = g.font;
+  ctx.fillStyle = g.color ?? color;
   if ('letterSpacing' in ctx) ctx.letterSpacing = g.letterSpacing;
   ctx.globalAlpha = a;
   for (let c = 0; c < n; c++) {
@@ -478,7 +504,8 @@ function drawEndCard(f: Frame, getImage: RenderInput['getImage'], d: number): vo
     ctx.save();
     ctx.globalAlpha = easeOutCubic(v);
     if (v < 1) ctx.filter = `blur(${((1 - eased) * W * 0.01).toFixed(1)}px)`;
-    ctx.drawImage(logo.source, (W - logoW) / 2, y, logoW, logoH);
+    const source = p.endCard.logoColor ? tintedImage(logo, p.endCard.logoColor) : logo.source;
+    ctx.drawImage(source, (W - logoW) / 2, y, logoW, logoH);
     ctx.restore();
     y += logoH + gap;
   }
@@ -487,6 +514,32 @@ function drawEndCard(f: Frame, getImage: RenderInput['getImage'], d: number): vo
       drawLine(f, line, (W - line.width) / 2, y + line.top, easeOutCubic(v), 0, (1 - eased) * f.bodyLine * 0.6);
     }
   }
+}
+
+const tintCache = new WeakMap<object, Map<string, HTMLCanvasElement>>();
+
+/** The image with every visible pixel painted `color`, keeping its transparency (cached). */
+function tintedImage(img: DrawableImage, color: string): HTMLCanvasElement {
+  let byColor = tintCache.get(img.source);
+  if (!byColor) {
+    byColor = new Map();
+    tintCache.set(img.source, byColor);
+  }
+  let canvas = byColor.get(color);
+  if (!canvas) {
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const c = canvas.getContext('2d')!;
+    c.drawImage(img.source, 0, 0, canvas.width, canvas.height);
+    c.globalCompositeOperation = 'source-in';
+    c.fillStyle = color;
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    if (byColor.size > 8) byColor.clear();
+    byColor.set(color, canvas);
+  }
+  return canvas;
 }
 
 /* ------------------------------------------------------------------ */

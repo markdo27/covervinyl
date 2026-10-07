@@ -48,6 +48,19 @@ describe('layoutText', () => {
     expect(block.lines.map((l) => l.runs.map((r) => r.text).join(''))).toEqual(['aaaa bbbb', 'cccc']);
   });
 
+  it('keeps inline colours on runs and in glyph identity', () => {
+    const ctx = fakeCtx();
+    const block = layoutText(ctx, 'a {#ff0000}b{/}', style, 1000);
+    expect(block.lines[0].runs.map((r) => [r.text, r.color])).toEqual([
+      ['a ', undefined],
+      ['b', '#ff0000'],
+    ]);
+    const [a, b] = blockGlyphs(ctx, block);
+    expect(a.color).toBeUndefined();
+    expect(b.color).toBe('#ff0000');
+    expect(b.key).not.toBe(blockGlyphs(ctx, layoutText(ctx, 'a b', style, 1000))[1].key);
+  });
+
   it('breaks blocks into positioned glyphs, skipping spaces', () => {
     const ctx = fakeCtx();
     const glyphs = blockGlyphs(ctx, layoutText(ctx, 'ab **c**', style, 1000));

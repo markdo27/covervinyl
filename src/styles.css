@@ -538,22 +538,6 @@ textarea:focus {
   pointer-events: none;
 }
 
-.color-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.color-field input {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
-  padding: 2px;
-  background: var(--panel-2);
-}
-
 .note {
   margin: 0;
   color: var(--muted);
@@ -983,7 +967,139 @@ textarea:focus {
 }
 
 .markup-editor textarea {
-  padding-right: 110px;
+  padding-right: 136px;
+}
+
+/* Colour button + popover in the text toolbar */
+
+.color-tool-wrap {
+  position: relative;
+}
+
+.markup-tools .color-tool {
+  position: relative;
+  font-weight: 800;
+  line-height: 1;
+  padding-bottom: 3px;
+}
+
+.color-tool i {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.color-pop {
+  position: absolute;
+  z-index: 30;
+  top: 28px;
+  right: 0;
+  width: 172px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+.color-pop .color-pop-clear {
+  width: auto;
+  height: 24px;
+  flex: 1 1 100%;
+  margin-top: 2px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Swatch rows (shared by ColorField and the text colour popover) */
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  flex: none;
+}
+
+.swatch.is-active {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.swatch.is-default {
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(45deg, var(--panel-3) 0 3px, var(--panel-2) 3px 6px);
+}
+
+.swatch.is-default span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.swatch.is-custom {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: conic-gradient(#f44, #fd4, #4d6, #4cf, #66f, #e4e, #f44);
+}
+
+.swatch.is-custom span {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.swatch.is-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.logo-tinted {
+  display: block;
+  width: 72px;
+  height: 48px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 /* Text sections */

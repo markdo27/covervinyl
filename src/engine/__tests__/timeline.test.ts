@@ -3,7 +3,7 @@ import { buildTimeline, fitDurations, formatTime, slideIndexAt, sourceTime } fro
 
 const project = (durations: number[], end = 2, enabled = true) => ({
   slides: durations.map((duration, i) => ({ id: String(i), coverId: null, texts: {}, morphFrom: '', duration })),
-  endCard: { enabled, logoId: null, logoSize: 0.3, text: '', duration: end },
+  endCard: { enabled, logoId: null, logoSize: 0.3, logoColor: null, text: '', duration: end },
 });
 
 describe('buildTimeline', () => {

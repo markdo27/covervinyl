@@ -9,6 +9,7 @@ const section = (id: string, mode: TextSection['mode'], text = ''): TextSection 
   text,
   scale: 1,
   gap: 1,
+  color: null,
 });
 const slide = (texts: Record<string, string>): Slide => ({ id: 's', coverId: null, texts, morphFrom: '', duration: 3 });
 

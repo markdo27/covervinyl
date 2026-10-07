@@ -23,6 +23,8 @@ export interface PlacedRun {
   text: string;
   font: string;
   letterSpacing: string;
+  /** Inline colour, if the markup set one. */
+  color?: string;
   x: number;
   width: number;
 }
@@ -47,11 +49,12 @@ export interface Glyph {
   ch: string;
   font: string;
   letterSpacing: string;
+  color?: string;
   /** Left edge of the glyph relative to the block's left. */
   x: number;
   /** Vertical centre of the glyph's line relative to the block top. */
   y: number;
-  /** Identity used to match glyphs between two texts (char + font). */
+  /** Identity used to match glyphs between two texts (char + font + colour). */
   key: string;
 }
 
@@ -72,7 +75,8 @@ function measure(ctx: MeasureContext, text: string, font: string, letterSpacing:
   return ctx.measureText(text).width;
 }
 
-const sameStyle = (a: Run, b: Run) => a.bold === b.bold && a.italic === b.italic && a.light === b.light;
+const sameStyle = (a: Run, b: Run) =>
+  a.bold === b.bold && a.italic === b.italic && a.light === b.light && a.color === b.color;
 
 export function layoutText(
   ctx: MeasureContext,
@@ -132,7 +136,8 @@ export function layoutText(
       const runs: PlacedRun[] = merged.map(({ text, run }) => {
         const font = runFont(run, stack, px, style);
         const width = measure(ctx, text, font, letterSpacing);
-        const placed = { text, font, letterSpacing, x, width };
+        const placed: PlacedRun = { text, font, letterSpacing, x, width };
+        if (run.color) placed.color = run.color;
         x += width;
         return placed;
       });
@@ -158,7 +163,15 @@ export function blockGlyphs(ctx: MeasureContext, block: TextBlock): Glyph[] {
         const x = run.x + (prefix ? measure(ctx, prefix, run.font, run.letterSpacing) : 0);
         prefix += ch;
         if (/\s/.test(ch)) continue;
-        glyphs.push({ ch, font: run.font, letterSpacing: run.letterSpacing, x, y: cy, key: ch + '|' + run.font });
+        glyphs.push({
+          ch,
+          font: run.font,
+          letterSpacing: run.letterSpacing,
+          color: run.color,
+          x,
+          y: cy,
+          key: `${ch}|${run.font}|${run.color ?? ''}`,
+        });
       }
     }
   }
