@@ -24,6 +24,22 @@ describe('parseInline', () => {
   });
 });
 
+describe('inline colours', () => {
+  it('colours text between {#hex} and {/}', () => {
+    expect(parseInline('Produced by {#E2402F}**DJ Premier**{/}!')).toEqual([
+      { text: 'Produced by ', bold: false, italic: false, light: false },
+      { text: 'DJ Premier', bold: true, italic: false, light: false, color: '#e2402f' },
+      { text: '!', bold: false, italic: false, light: false },
+    ]);
+  });
+
+  it('supports short hex, runs to the end of the line when unclosed, and ignores non-colours', () => {
+    expect(parseInline('{#fff}white')).toEqual([{ text: 'white', bold: false, italic: false, light: false, color: '#fff' }]);
+    expect(parseInline('{not a colour} {/}x')).toEqual([{ text: '{not a colour} x', bold: false, italic: false, light: false }]);
+    expect(stripMarkup('{#123456}a{/} b')).toBe('a b');
+  });
+});
+
 describe('parseMarkup', () => {
   it('detects headlines and blank lines and trims the edges', () => {
     const lines = parseMarkup('\n# ~jazz~ **samples**\n\nProduced by **DJ Premier**\n\n');

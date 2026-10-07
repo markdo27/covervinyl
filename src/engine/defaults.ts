@@ -43,8 +43,16 @@ export function defaultProject(): Project {
       }),
     ],
     sections: [
-      { id: MAIN_SECTION, name: 'Slide text', mode: 'slide', text: '', scale: 1, gap: 0 },
-      { id: FOOTER_SECTION, name: 'Footer', mode: 'shared', text: '**your name** archives #01', scale: 0.85, gap: 1.6 },
+      { id: MAIN_SECTION, name: 'Slide text', mode: 'slide', text: '', scale: 1, gap: 0, color: null },
+      {
+        id: FOOTER_SECTION,
+        name: 'Footer',
+        mode: 'shared',
+        text: '**your name** archives #01',
+        scale: 0.85,
+        gap: 1.6,
+        color: null,
+      },
     ],
     text: {
       family: 'inter',
@@ -87,6 +95,7 @@ export function defaultProject(): Project {
       enabled: true,
       logoId: null,
       logoSize: 0.28,
+      logoColor: null,
       text: '**your name**\n~record bar~',
       duration: 2.5,
     },

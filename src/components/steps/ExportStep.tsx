@@ -3,7 +3,7 @@ import { slideCaption } from '../../engine/sections';
 import { fitDurations, formatTime, type Timeline } from '../../engine/timeline';
 import type { ImageAsset, Project, VideoAsset } from '../../engine/types';
 import { MarkupEditor } from '../MarkupEditor';
-import { NumberField, PickFile, Section, Segmented, Slider, Toggle } from '../ui';
+import { ColorField, NumberField, PickFile, Section, Segmented, Slider, Toggle } from '../ui';
 
 interface Props {
   project: Project;
@@ -79,7 +79,18 @@ export function ExportStep({ project, update, images, video, timeline, onLogoFil
       {e.enabled && (
         <div className="endcard">
           <div className="endcard-logo">
-            {logo ? (
+            {logo && e.logoColor ? (
+              <span
+                className="logo-tinted"
+                role="img"
+                aria-label="End card logo"
+                style={{
+                  backgroundColor: e.logoColor,
+                  maskImage: `url("${logo.url}")`,
+                  WebkitMaskImage: `url("${logo.url}")`,
+                }}
+              />
+            ) : logo ? (
               <img src={logo.url} alt="End card logo" />
             ) : (
               <span className="logo-empty">No logo</span>
@@ -95,6 +106,18 @@ export function ExportStep({ project, update, images, video, timeline, onLogoFil
               )}
             </div>
           </div>
+          {logo && (
+            <ColorField
+              label="Logo colour"
+              value={e.logoColor}
+              fallback="#ffffff"
+              defaultLabel="Original"
+              onChange={(logoColor) => setEnd({ logoColor })}
+            />
+          )}
+          {logo && e.logoColor && (
+            <p className="note">Recolouring fills every visible pixel — use a logo with a transparent background (PNG or SVG).</p>
+          )}
           {logo && (
             <Slider label="Logo size" value={e.logoSize} min={0.1} max={0.8} step={0.01} format={(x) => `${Math.round(x * 100)}%`} onChange={(logoSize) => setEnd({ logoSize })} />
           )}

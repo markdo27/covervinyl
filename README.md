@@ -15,10 +15,10 @@ Everything runs in the browser. Files are never uploaded anywhere.
 | --- | --- |
 | **1. Recorded video** | Upload the clip that plays in the background (MP4 / MOV / WebM). Trim the start, zoom, reposition, darken, loop, keep or drop its audio. |
 | **2. Album covers** | Upload one or more covers — each becomes a slide. Upcoming covers peek out behind the current one like records in a crate. Reorder, replace or add slides. |
-| **3. Text** | Text is a stack of sections you can add, remove, rename and reorder. Each section is either *different on each slide* (e.g. the credits) or *the same on every slide* (e.g. a footer), with its own size and spacing — keep one kind, both, or none for covers only. The first per-slide section can have a "morph intro" so its title grows from one text into another (e.g. `jazz**matic**` → `jazz samples: **illmatic**`). |
+| **3. Text** | Text is a stack of sections you can add, remove, rename and reorder. Each section is either *different on each slide* (e.g. the credits) or *the same on every slide* (e.g. a footer), with its own size, spacing and colour — keep one kind, both, or none for covers only. Pick a default text colour, or colour individual words with the toolbar's colour button. The first per-slide section can have a "morph intro" so its title grows from one text into another (e.g. `jazz**matic**` → `jazz samples: **illmatic**`). |
 | **4. Fonts** | Upload your own `.ttf` / `.otf` / `.woff` / `.woff2` files (drop Regular, Bold and Italic together). The family name and weight are read from the font file itself. |
 | **5. Look & grain** | Post-process the whole frame: cinematic colour looks (Teal & Orange, Film Print, Bleach Bypass, Faded Matte, Warm 70s, Moonlight, Cross Process, Vivid, Noir) or your own `.cube` LUT, with an intensity slider, plus film grain and a vignette. |
-| **6. Duration & export** | Set how long each cover stays on screen (or match the clip length), add an end card with your logo, pick **9:16** (1080×1920) or **3:4** (1080×1440) and export. |
+| **6. Duration & export** | Set how long each cover stays on screen (or match the clip length), add an end card with your logo (optionally recoloured to any colour), pick **9:16** (1080×1920) or **3:4** (1080×1440) and export. |
 
 Drag the preview to move the cover + text block. Space bar plays / pauses. "Safe zones"
 shows where Instagram's UI covers a Reel.
@@ -26,7 +26,7 @@ shows where Instagram's UI covers a Reel.
 ### Text markup
 
 ```
-**bold**   *italic*   ~light~   # headline line   \* (literal asterisk)
+**bold**   *italic*   ~light~   {#e2402f}coloured{/}   # headline line   \* (literal asterisk)
 ```
 
 Example slide:
@@ -36,7 +36,7 @@ Example slide:
 *Double Exposure* **1978**
 -
 **"N.Y. State of Mind"**
-Produced by **DJ Premier**
+Produced by {#e2402f}**DJ Premier**{/}
 ```
 
 ## Export

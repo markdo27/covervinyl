@@ -3,6 +3,7 @@
  * bold / italic / light styling seen in vinyl "sample breakdown" reels.
  *
  *   **bold**      *italic*      ~light~      \* escapes a marker
+ *   {#ff5500}coloured words{/}      (any #rgb / #rrggbb colour)
  *   # Headline    (a line starting with "# " is drawn larger)
  *
  * Markers toggle, so they can be combined (`***bold italic***`) and an
@@ -14,7 +15,12 @@ export interface Run {
   bold: boolean;
   italic: boolean;
   light: boolean;
+  /** Inline colour from {#hex}…{/}; undefined means the section's colour. */
+  color?: string;
 }
+
+const COLOR_OPEN = /^\{(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\}/;
+const COLOR_CLOSE = '{/}';
 
 export type LineKind = 'headline' | 'body' | 'blank';
 
@@ -28,15 +34,16 @@ export function parseInline(src: string): Run[] {
   let bold = false;
   let italic = false;
   let light = false;
+  let color: string | undefined;
   let buf = '';
 
   const flush = () => {
     if (!buf) return;
     const last = runs[runs.length - 1];
-    if (last && last.bold === bold && last.italic === italic && last.light === light) {
+    if (last && last.bold === bold && last.italic === italic && last.light === light && last.color === color) {
       last.text += buf;
     } else {
-      runs.push({ text: buf, bold, italic, light });
+      runs.push(color ? { text: buf, bold, italic, light, color } : { text: buf, bold, italic, light });
     }
     buf = '';
   };
@@ -56,6 +63,15 @@ export function parseInline(src: string): Run[] {
     } else if (ch === '~') {
       flush();
       light = !light;
+    } else if (ch === '{' && src.startsWith(COLOR_CLOSE, i)) {
+      flush();
+      color = undefined;
+      i += COLOR_CLOSE.length - 1;
+    } else if (ch === '{' && COLOR_OPEN.test(src.slice(i))) {
+      const m = COLOR_OPEN.exec(src.slice(i))!;
+      flush();
+      color = m[1].toLowerCase();
+      i += m[0].length - 1;
     } else {
       buf += ch;
     }

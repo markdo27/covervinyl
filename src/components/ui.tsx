@@ -223,3 +223,59 @@ export function PickFile(props: {
     </>
   );
 }
+
+export const SWATCHES = ['#ffffff', '#f4e9d8', '#9aa0a6', '#111111', '#e2402f', '#f3a64b', '#f2d14b', '#7fd1c7', '#6f8cff'];
+
+/**
+ * Colour picker with quick swatches and a custom colour. With `defaultLabel`
+ * it offers a "use default" option, which reports null.
+ */
+export function ColorField(props: {
+  label: string;
+  value: string | null;
+  /** Colour shown for the default option / custom picker when value is null. */
+  fallback: string;
+  defaultLabel?: string;
+  onChange: (v: string | null) => void;
+}) {
+  const current = (props.value ?? props.fallback).toLowerCase();
+  const isCustom = props.value !== null && !SWATCHES.includes(props.value.toLowerCase());
+  return (
+    <div className="field color-picker">
+      <div className="field-row">
+        <label>{props.label}</label>
+        <span className="field-value">{props.value === null && props.defaultLabel ? props.defaultLabel : current}</span>
+      </div>
+      <div className="swatches" role="radiogroup" aria-label={props.label}>
+        {props.defaultLabel && (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={props.value === null}
+            className={`swatch is-default ${props.value === null ? 'is-active' : ''}`}
+            title={props.defaultLabel}
+            onClick={() => props.onChange(null)}
+          >
+            <span style={{ background: props.fallback }} />
+          </button>
+        )}
+        {SWATCHES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            role="radio"
+            aria-checked={props.value?.toLowerCase() === c}
+            aria-label={c}
+            className={`swatch ${props.value?.toLowerCase() === c ? 'is-active' : ''}`}
+            style={{ background: c }}
+            onClick={() => props.onChange(c)}
+          />
+        ))}
+        <label className={`swatch is-custom ${isCustom ? 'is-active' : ''}`} title="Custom colour">
+          <input type="color" value={current} onChange={(e) => props.onChange(e.target.value)} aria-label={`${props.label}: custom`} />
+          <span style={isCustom ? { background: current } : undefined}>+</span>
+        </label>
+      </div>
+    </div>
+  );
+}
