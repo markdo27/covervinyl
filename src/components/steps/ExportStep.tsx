@@ -1,5 +1,5 @@
 import { OUTPUT_SIZES } from '../../engine/defaults';
-import { stripMarkup } from '../../engine/markup';
+import { slideCaption } from '../../engine/sections';
 import { fitDurations, formatTime, type Timeline } from '../../engine/timeline';
 import type { ImageAsset, Project, VideoAsset } from '../../engine/types';
 import { MarkupEditor } from '../MarkupEditor';
@@ -27,7 +27,7 @@ export function ExportStep({ project, update, images, video, timeline, onLogoFil
   const [w, h] = OUTPUT_SIZES[project.ratio][project.export.resolution];
 
   return (
-    <Section step={5} title="Duration & export" subtitle="Timing, canvas size and download">
+    <Section step={6} title="Duration & export" subtitle="Timing, canvas size and download">
       <div className="duration-list">
         {project.slides.map((slide, i) => {
           const img = slide.coverId ? images.get(slide.coverId) : undefined;
@@ -36,7 +36,7 @@ export function ExportStep({ project, update, images, video, timeline, onLogoFil
               <span className="mini-thumb" style={img ? { backgroundImage: `url("${img.url}")` } : undefined}>
                 {i + 1}
               </span>
-              <span className="duration-label">{stripMarkup(slide.text) || `Slide ${i + 1}`}</span>
+              <span className="duration-label">{slideCaption(project, slide) || `Slide ${i + 1}`}</span>
               <NumberField
                 value={slide.duration}
                 min={0.5}

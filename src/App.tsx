@@ -3,13 +3,16 @@ import { ExportDialog, type ExportStatus } from './components/ExportDialog';
 import { Preview, type PreviewController } from './components/Preview';
 import { CoversStep } from './components/steps/CoversStep';
 import { ExportStep } from './components/steps/ExportStep';
+import { FiltersStep } from './components/steps/FiltersStep';
 import { FontsStep } from './components/steps/FontsStep';
 import { TextStep } from './components/steps/TextStep';
 import { VideoStep } from './components/steps/VideoStep';
-import { defaultProject, newSlide, OUTPUT_SIZES } from './engine/defaults';
+import { defaultProject, newSlide, OUTPUT_SIZES, uid } from './engine/defaults';
 import { ensureFontsLoaded, fontStack, loadUserFont, unloadUserFont, userFontKey, type UserFontFace } from './engine/fonts';
+import { CUSTOM_LUT_PREFIX, parseCubeLut, presetLut, type Lut } from './engine/luts';
 import { clearPlaceholderCache } from './engine/placeholder';
 import type { DrawableImage } from './engine/renderer';
+import { morphSection, PLACEHOLDER_CREDITS } from './engine/sections';
 import { clearLayoutCache } from './engine/textLayout';
 import { buildTimeline } from './engine/timeline';
 import type { ImageAsset, Placement, Project, VideoAsset } from './engine/types';
@@ -21,6 +24,7 @@ export default function App() {
   const [video, setVideo] = useState<VideoAsset | null>(null);
   const [fonts, setFonts] = useState<UserFontFace[]>([]);
   const [fontEpoch, setFontEpoch] = useState(0);
+  const [customLuts, setCustomLuts] = useState<Lut[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [notice, setNotice] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
@@ -37,6 +41,12 @@ export default function App() {
       return asset ? { source: asset.image, width: asset.width, height: asset.height } : null;
     },
     [images],
+  );
+
+  const getLut = useCallback(
+    (key: string): Lut | null =>
+      key.startsWith(CUSTOM_LUT_PREFIX) ? (customLuts.find((l) => l.key === key) ?? null) : presetLut(key),
+    [customLuts],
   );
 
   const flash = useCallback((kind: 'error' | 'info', text: string) => setNotice({ kind, text }), []);
@@ -113,7 +123,10 @@ export default function App() {
       for (let i = 0; i < slides.length && queue.length; i++) {
         if (!slides[i].coverId) slides[i] = { ...slides[i], coverId: queue.shift()!.id };
       }
-      for (const asset of queue) slides.push(newSlide({ coverId: asset.id }));
+      const main = morphSection(p.sections);
+      for (const asset of queue) {
+        slides.push(newSlide({ coverId: asset.id, texts: main ? { [main.id]: PLACEHOLDER_CREDITS } : {} }));
+      }
       return { ...p, slides };
     });
     flash('info', `Added ${loaded.length} cover${loaded.length > 1 ? 's' : ''}.`);
@@ -164,6 +177,22 @@ export default function App() {
     setFontEpoch((e) => e + 1);
   };
 
+  const onLutFile = async (file: File) => {
+    try {
+      const lut = parseCubeLut(await file.text(), CUSTOM_LUT_PREFIX + uid('lut'), file.name.replace(/\.cube$/i, ''));
+      setCustomLuts((old) => [...old, lut]);
+      update((p) => ({ ...p, post: { ...p.post, lut: lut.key, lutIntensity: 1 } }));
+      flash('info', `Loaded LUT “${lut.name}” (${lut.size}³).`);
+    } catch (err) {
+      flash('error', `Couldn't load “${file.name}”: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const onRemoveLut = (key: string) => {
+    setCustomLuts((old) => old.filter((l) => l.key !== key));
+    update((p) => (p.post.lut === key ? { ...p, post: { ...p.post, lut: 'none' } } : p));
+  };
+
   /* ---------------- Navigation ---------------- */
 
   const selectSlide = (i: number) => {
@@ -172,7 +201,8 @@ export default function App() {
     if (!seg) return;
     const slide = project.slides[i];
     const m = project.motion;
-    const morph = slide.morphFrom.trim() ? m.morphDuration + (i === 0 ? m.introDelay : 0.35) : 0;
+    const hasMorph = !!morphSection(project.sections) && !!slide.morphFrom.trim();
+    const morph = hasMorph ? m.morphDuration + (i === 0 ? m.introDelay : 0.35) : 0;
     const settle = i === 0 ? Math.max(morph, m.fanOut ? m.introDelay + 1.1 : 0) : m.transition * 1.6 + morph;
     previewRef.current?.seek(seg.start + Math.min(settle + 0.05, seg.end - seg.start - 0.05));
   };
@@ -201,6 +231,7 @@ export default function App() {
           fps: project.export.fps,
           video,
           getImage,
+          getLut,
           signal: controller.signal,
           onProgress: (progress, label) => {
             if (!controller.signal.aborted) setExportStatus({ phase: 'running', progress, label });
@@ -275,6 +306,13 @@ export default function App() {
           />
           <TextStep project={project} update={update} images={images} activeSlide={activeSlide} onSelectSlide={selectSlide} />
           <FontsStep project={project} update={update} fonts={fonts} onFontFiles={onFontFiles} onRemoveFamily={onRemoveFamily} />
+          <FiltersStep
+            project={project}
+            update={update}
+            customLuts={customLuts}
+            onLutFile={onLutFile}
+            onRemoveLut={onRemoveLut}
+          />
           <ExportStep
             project={project}
             update={update}
@@ -294,7 +332,8 @@ export default function App() {
             timeline={timeline}
             video={video}
             getImage={getImage}
-            redrawKey={`${images.size}:${fontEpoch}`}
+            getLut={getLut}
+            redrawKey={`${images.size}:${fontEpoch}:${customLuts.length}`}
             controllerRef={previewRef}
             onPlacementChange={onPlacementChange}
             onRatioChange={onRatioChange}

@@ -10,12 +10,15 @@ export function newSlide(partial: Partial<Slide> = {}): Slide {
   return {
     id: uid('slide'),
     coverId: null,
-    text: '**"Song Title" Artist Name**\n*Album Title* **1970**\n-\n**"Track It Was Sampled On"**\nProduced by **Producer**',
+    texts: {},
     morphFrom: '',
     duration: 4,
     ...partial,
   };
 }
+
+const MAIN_SECTION = 'sec-main';
+const FOOTER_SECTION = 'sec-footer';
 
 export function defaultProject(): Project {
   return {
@@ -23,25 +26,32 @@ export function defaultProject(): Project {
     slides: [
       newSlide({
         morphFrom: '# ~vinyl~**cuts**',
-        text: '# ~vinyl samples:~ **deep cuts**',
+        texts: { [MAIN_SECTION]: '# ~vinyl samples:~ **deep cuts**' },
         duration: 3.5,
       }),
       newSlide({
-        text: '**"Song Title" Artist Name**\n*Album Title* **1978**\n-\n**"Track It Was Sampled On"**\nProduced by **Producer**',
+        texts: {
+          [MAIN_SECTION]:
+            '**"Song Title" Artist Name**\n*Album Title* **1978**\n-\n**"Track It Was Sampled On"**\nProduced by **Producer**',
+        },
       }),
       newSlide({
-        text: '**"Another Song" Another Artist**\n*Album Title* **1975**\n-\n**"Track Name"**\nProduced by **Producer**',
+        texts: {
+          [MAIN_SECTION]:
+            '**"Another Song" Another Artist**\n*Album Title* **1975**\n-\n**"Track Name"**\nProduced by **Producer**',
+        },
       }),
     ],
-    footer: '**your name** archives #01',
-    footerGap: 1.6,
+    sections: [
+      { id: MAIN_SECTION, name: 'Slide text', mode: 'slide', text: '', scale: 1, gap: 0 },
+      { id: FOOTER_SECTION, name: 'Footer', mode: 'shared', text: '**your name** archives #01', scale: 0.85, gap: 1.6 },
+    ],
     text: {
       family: 'inter',
       headlineFamily: 'inter',
       color: '#ffffff',
       size: 0.039,
       headlineScale: 1.55,
-      footerScale: 0.85,
       lineHeight: 1.42,
       tracking: -0.01,
       weights: { light: 300, regular: 400, bold: 700 },
@@ -79,6 +89,13 @@ export function defaultProject(): Project {
       logoSize: 0.28,
       text: '**your name**\n~record bar~',
       duration: 2.5,
+    },
+    post: {
+      lut: 'none',
+      lutIntensity: 1,
+      grain: 0,
+      grainSize: 1.5,
+      vignette: 0,
     },
     export: {
       resolution: 1080,

@@ -2,6 +2,7 @@ import { clamp01, easeInCubic, easeInOutCubic, easeOutCubic, easeOutExpo, lerp }
 import { fontStack } from './fonts';
 import { planMorph, type MorphPlan } from './morph';
 import { drawPlaceholderBackground, placeholderCover } from './placeholder';
+import { morphSection, sectionMarkup, stackSections } from './sections';
 import {
   cachedGlyphs,
   cachedLayout,
@@ -11,7 +12,7 @@ import {
   type TextMetricsStyle,
 } from './textLayout';
 import { slideIndexAt, type Timeline } from './timeline';
-import type { Project } from './types';
+import type { Project, Ratio, TextSection } from './types';
 
 export interface DrawableImage {
   source: CanvasImageSource;
@@ -44,8 +45,9 @@ interface Frame {
   textTop: number;
   maxTextWidth: number;
   style: TextMetricsStyle;
-  footerStyle: TextMetricsStyle;
   bodyLine: number;
+  /** Id of the per-slide section the intro morph applies to. */
+  morphId: string | undefined;
 }
 
 const morphPlans = new Map<string, MorphPlan<Glyph>>();
@@ -77,8 +79,8 @@ export function renderFrame(ctx: CanvasRenderingContext2D, W: number, H: number,
     textTop: place.y * H + coverSize + 0.035 * W,
     maxTextWidth: Math.max(W * 0.2, W - place.x * W - 0.05 * W),
     style,
-    footerStyle: { ...style, bodyPx: bodyPx * p.text.footerScale, headlinePx: style.headlinePx * p.text.footerScale },
     bodyLine: bodyPx * p.text.lineHeight,
+    morphId: morphSection(p.sections)?.id,
   };
 
   ctx.save();
@@ -98,7 +100,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, W: number, H: number,
     drawSlideText(f, overlayAlpha);
   }
   if (hasEnd && t >= tl.endStart) drawEndCard(f, input.getImage, d);
-  if (input.safeZones) drawSafeZones(f);
+  if (input.safeZones) drawSafeZones(ctx, W, H, p.ratio);
 
   ctx.restore();
 }
@@ -234,39 +236,56 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 function morphProgress(f: Frame, i: number, t: number): number {
   const slide = f.p.slides[i];
-  if (!slide.morphFrom.trim()) return 1;
+  if (!f.morphId || !slide.morphFrom.trim()) return 1;
   const start = f.tl.slideStarts[i] + (i === 0 ? f.p.motion.introDelay : f.p.motion.transition + 0.35);
   return clamp01((t - start) / Math.max(0.05, f.p.motion.morphDuration));
 }
 
-function block(f: Frame, markup: string, style = f.style): TextBlock {
+function sectionStyle(f: Frame, section: TextSection): TextMetricsStyle {
+  if (section.scale === 1) return f.style;
+  return { ...f.style, bodyPx: f.style.bodyPx * section.scale, headlinePx: f.style.headlinePx * section.scale };
+}
+
+function block(f: Frame, markup: string, style: TextMetricsStyle): TextBlock {
   return cachedLayout(f.ctx, markup, style, f.maxTextWidth);
 }
 
-/** Height of slide i's text at time t, following its morph. */
-function textHeight(f: Frame, i: number, t: number): number {
+/** Height of a section on slide i at time t, following the intro morph. */
+function sectionHeight(f: Frame, section: TextSection, i: number, t: number): number {
   const slide = f.p.slides[i];
-  const to = block(f, slide.text).height;
-  if (!slide.morphFrom.trim()) return to;
-  const from = block(f, slide.morphFrom).height;
+  const style = sectionStyle(f, section);
+  const to = block(f, sectionMarkup(section, slide), style).height;
+  if (section.id !== f.morphId || !slide.morphFrom.trim()) return to;
+  const from = block(f, slide.morphFrom, style).height;
   return lerp(from, to, easeInOutCubic(morphProgress(f, i, t)));
 }
 
-function footerTop(f: Frame, t: number): number {
+/** Top offset (below the cover) of every section on slide i at time t. */
+function sectionTops(f: Frame, i: number, t: number): number[] {
+  const { sections } = f.p;
+  return stackSections(
+    sections.map((s) => sectionHeight(f, s, i, t)),
+    sections.map((s) => s.gap),
+    f.bodyLine,
+  );
+}
+
+/** Top of section k at time t, gliding from its old spot during a slide change. */
+function glidingTop(f: Frame, k: number, t: number): number {
   const idx = slideIndexAt(f.tl, Math.min(t, f.tl.endStart - 1e-6));
-  const gap = f.p.footerGap * f.bodyLine;
-  const cur = textHeight(f, idx, t);
+  const cur = sectionTops(f, idx, t)[k];
   const local = t - f.tl.slideStarts[idx];
   const d = f.p.motion.transition;
   if (idx > 0 && local < d) {
-    const prev = textHeight(f, idx - 1, f.tl.slideStarts[idx]);
-    return f.textTop + lerp(prev, cur, easeInOutCubic(local / d)) + gap;
+    const prev = sectionTops(f, idx - 1, f.tl.slideStarts[idx])[k];
+    return lerp(prev, cur, easeInOutCubic(local / d));
   }
-  return f.textTop + cur + gap;
+  return cur;
 }
 
 function drawSlideText(f: Frame, alpha: number): void {
   const { p, tl, t } = f;
+  if (!p.sections.length) return;
   const idx = slideIndexAt(tl, Math.min(t, tl.endStart - 1e-6));
   if (idx < 0) return;
   const slide = p.slides[idx];
@@ -274,53 +293,75 @@ function drawSlideText(f: Frame, alpha: number): void {
   const d = p.motion.transition;
   const stagger = d * 0.075;
 
-  // Outgoing text of the previous slide.
+  // Outgoing per-slide text of the previous slide, line by line.
   if (idx > 0 && local < d * 1.5) {
-    const prev = block(f, p.slides[idx - 1].text);
-    prev.lines.forEach((line, k) => {
-      const e = clamp01((local - k * stagger * 0.6) / (d * 0.45));
-      if (e >= 1) return;
-      const dy = -easeInCubic(e) * f.bodyLine * 1.1;
-      const smear = easeInCubic(e) * f.bodyLine * 0.7;
-      drawLine(f, line, f.baseX, f.textTop + line.top + dy, alpha * (1 - easeOutCubic(e)), 0, smear);
+    const prevSlide = p.slides[idx - 1];
+    const tops = sectionTops(f, idx - 1, tl.slideStarts[idx]);
+    let k = 0;
+    p.sections.forEach((section, s) => {
+      if (section.mode !== 'slide') return;
+      for (const line of block(f, sectionMarkup(section, prevSlide), sectionStyle(f, section)).lines) {
+        const e = clamp01((local - k++ * stagger * 0.6) / (d * 0.45));
+        if (e >= 1) continue;
+        const dy = -easeInCubic(e) * f.bodyLine * 1.1;
+        const smear = easeInCubic(e) * f.bodyLine * 0.7;
+        drawLine(f, line, f.baseX, f.textTop + tops[s] + line.top + dy, alpha * (1 - easeOutCubic(e)), 0, smear);
+      }
     });
   }
 
+  // Current per-slide text (sliding in after a slide change).
+  const tops = sectionTops(f, idx, t);
   const mu = morphProgress(f, idx, t);
-  const entering = idx > 0;
-  if (mu > 0 && mu < 1) {
-    drawMorph(f, slide.morphFrom, slide.text, mu, alpha);
-  } else {
-    const markup = mu <= 0 ? slide.morphFrom : slide.text;
-    const cur = block(f, markup);
-    cur.lines.forEach((line, k) => {
-      if (!entering) {
-        drawLine(f, line, f.baseX, f.textTop + line.top, alpha, 0, 0);
-        return;
+  let k = 0;
+  p.sections.forEach((section, s) => {
+    if (section.mode !== 'slide') return;
+    const style = sectionStyle(f, section);
+    const top = f.textTop + tops[s];
+    const morphing = section.id === f.morphId && slide.morphFrom.trim() !== '';
+    if (morphing && mu > 0 && mu < 1) {
+      drawMorph(f, slide.morphFrom, sectionMarkup(section, slide), style, top, mu, alpha);
+      return;
+    }
+    const markup = morphing && mu <= 0 ? slide.morphFrom : sectionMarkup(section, slide);
+    for (const line of block(f, markup, style).lines) {
+      const lineIndex = k++;
+      if (idx === 0) {
+        drawLine(f, line, f.baseX, top + line.top, alpha, 0, 0);
+        continue;
       }
-      const v = clamp01((local - d * 0.3 - k * stagger) / (d * 0.75));
-      if (v <= 0) return;
+      const v = clamp01((local - d * 0.3 - lineIndex * stagger) / (d * 0.75));
+      if (v <= 0) continue;
       const eased = easeOutExpo(v);
       const dy = (1 - eased) * f.bodyLine * 1.3;
       const smear = (1 - eased) * f.bodyLine * 0.9;
-      drawLine(f, line, f.baseX, f.textTop + line.top + dy, alpha * easeOutCubic(v), 0, smear);
-    });
-  }
+      drawLine(f, line, f.baseX, top + line.top + dy, alpha * easeOutCubic(v), 0, smear);
+    }
+  });
 
-  // Footer glides to its new spot under the text.
-  if (p.footer.trim()) {
-    const fb = block(f, p.footer, f.footerStyle);
-    const y = footerTop(f, t);
-    const smear = Math.min(f.bodyLine, Math.abs(y - footerTop(f, t - 1 / 60)) * 2.5);
-    for (const line of fb.lines) drawLine(f, line, f.baseX, y + line.top, alpha, 0, smear);
-  }
+  // Shared sections stay on screen and glide to their new spot.
+  p.sections.forEach((section, s) => {
+    if (section.mode !== 'shared' || !section.text.trim()) return;
+    const b = block(f, section.text, sectionStyle(f, section));
+    const y = f.textTop + glidingTop(f, s, t);
+    const smear = Math.min(f.bodyLine, Math.abs(y - (f.textTop + glidingTop(f, s, t - 1 / 60))) * 2.5);
+    for (const line of b.lines) drawLine(f, line, f.baseX, y + line.top, alpha, 0, smear);
+  });
 }
 
-function drawMorph(f: Frame, fromMarkup: string, toMarkup: string, mu: number, alpha: number): void {
+function drawMorph(
+  f: Frame,
+  fromMarkup: string,
+  toMarkup: string,
+  style: TextMetricsStyle,
+  oy: number,
+  mu: number,
+  alpha: number,
+): void {
   const { ctx } = f;
-  const from = cachedGlyphs(ctx, fromMarkup, f.style, f.maxTextWidth);
-  const to = cachedGlyphs(ctx, toMarkup, f.style, f.maxTextWidth);
-  const key = JSON.stringify([fromMarkup, toMarkup, f.style, Math.round(f.maxTextWidth)]);
+  const from = cachedGlyphs(ctx, fromMarkup, style, f.maxTextWidth);
+  const to = cachedGlyphs(ctx, toMarkup, style, f.maxTextWidth);
+  const key = JSON.stringify([fromMarkup, toMarkup, style, Math.round(f.maxTextWidth)]);
   let plan = morphPlans.get(key);
   if (!plan) {
     if (morphPlans.size > 50) morphPlans.clear();
@@ -330,7 +371,6 @@ function drawMorph(f: Frame, fromMarkup: string, toMarkup: string, mu: number, a
 
   const eased = easeInOutCubic(mu);
   const ox = f.baseX;
-  const oy = f.textTop;
   setTextStyle(f);
 
   for (const [a, b] of plan.matched) {
@@ -453,9 +493,8 @@ function drawEndCard(f: Frame, getImage: RenderInput['getImage'], d: number): vo
 /* Safe zones                                                          */
 /* ------------------------------------------------------------------ */
 
-function drawSafeZones(f: Frame): void {
-  const { ctx, W, H, p } = f;
-  if (p.ratio !== '9:16') return;
+export function drawSafeZones(ctx: CanvasRenderingContext2D, W: number, H: number, ratio: Ratio): void {
+  if (ratio !== '9:16') return;
   ctx.save();
   ctx.fillStyle = 'rgba(255, 64, 64, 0.16)';
   ctx.strokeStyle = 'rgba(255, 120, 120, 0.6)';

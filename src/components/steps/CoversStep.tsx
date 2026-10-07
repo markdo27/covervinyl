@@ -1,5 +1,5 @@
 import { newSlide } from '../../engine/defaults';
-import { stripMarkup } from '../../engine/markup';
+import { morphSection, PLACEHOLDER_CREDITS, slideCaption } from '../../engine/sections';
 import type { ImageAsset, Project } from '../../engine/types';
 import { FileDrop, PickFile, Section, Slider, Toggle } from '../ui';
 
@@ -60,8 +60,8 @@ export function CoversStep({ project, update, images, activeSlide, onAddCovers, 
                 {!img && <span className="cover-empty">No cover</span>}
                 <span className="cover-num">{i + 1}</span>
               </button>
-              <span className="cover-caption" title={stripMarkup(slide.text)}>
-                {stripMarkup(slide.text) || 'Untitled'}
+              <span className="cover-caption" title={slideCaption(project, slide)}>
+                {slideCaption(project, slide) || 'No text'}
               </span>
               <div className="cover-actions">
                 <PickFile accept="image/*" className="icon-btn" title="Replace cover" onFile={(f) => onReplaceCover(i, f)}>
@@ -96,7 +96,12 @@ export function CoversStep({ project, update, images, activeSlide, onAddCovers, 
           <button
             type="button"
             className="cover-thumb add-thumb"
-            onClick={() => update((p) => ({ ...p, slides: [...p.slides, newSlide()] }))}
+            onClick={() =>
+              update((p) => {
+                const main = morphSection(p.sections);
+                return { ...p, slides: [...p.slides, newSlide({ texts: main ? { [main.id]: PLACEHOLDER_CREDITS } : {} })] };
+              })
+            }
           >
             <span>+</span>
             <small>Add slide</small>

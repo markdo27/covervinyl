@@ -1,3 +1,4 @@
+import type { Lut } from '../engine/luts';
 import type { DrawableImage } from '../engine/renderer';
 import type { Timeline } from '../engine/timeline';
 import type { Project, VideoAsset } from '../engine/types';
@@ -10,6 +11,7 @@ export interface ExportJob {
   fps: number;
   video: VideoAsset | null;
   getImage: (id: string | null) => DrawableImage | null;
+  getLut: (key: string) => Lut | null;
   signal: AbortSignal;
   onProgress: (progress: number, label: string) => void;
 }
