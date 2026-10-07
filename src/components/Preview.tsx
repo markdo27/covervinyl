@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import { renderFrame, type DrawableImage } from '../engine/renderer';
+import { Compositor } from '../engine/compositor';
+import type { Lut } from '../engine/luts';
+import type { DrawableImage } from '../engine/renderer';
 import { formatTime, sourceTime, type Timeline } from '../engine/timeline';
 import { RATIOS, type Placement, type Project, type VideoAsset } from '../engine/types';
 import { Segmented } from './ui';
@@ -15,6 +17,7 @@ interface Props {
   timeline: Timeline;
   video: VideoAsset | null;
   getImage: (id: string | null) => DrawableImage | null;
+  getLut: (key: string) => Lut | null;
   /** Changes whenever fonts/images change so the frame is redrawn. */
   redrawKey: string;
   controllerRef: RefObject<PreviewController | null>;
@@ -22,7 +25,17 @@ interface Props {
   onRatioChange: (ratio: Project['ratio']) => void;
 }
 
-export function Preview({ project, timeline, video, getImage, redrawKey, controllerRef, onPlacementChange, onRatioChange }: Props) {
+export function Preview({
+  project,
+  timeline,
+  video,
+  getImage,
+  getLut,
+  redrawKey,
+  controllerRef,
+  onPlacementChange,
+  onRatioChange,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -32,8 +45,9 @@ export function Preview({ project, timeline, video, getImage, redrawKey, control
   const [safeZones, setSafeZones] = useState(false);
 
   // Mutable state read by the render loop.
-  const live = useRef({ project, timeline, getImage, safeZones, video });
-  live.current = { project, timeline, getImage, safeZones, video };
+  const live = useRef({ project, timeline, getImage, getLut, safeZones, video });
+  live.current = { project, timeline, getImage, getLut, safeZones, video };
+  const compositorRef = useRef<Compositor | null>(null);
   const timeRef = useRef(0);
   const playingRef = useRef(false);
   const clockRef = useRef({ wall: 0, t: 0 });
@@ -66,21 +80,25 @@ export function Preview({ project, timeline, video, getImage, redrawKey, control
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const { project: p, timeline: tl, getImage: gi, safeZones: sz } = live.current;
+    compositorRef.current ??= new Compositor(ctx);
+    const { project: p, timeline: tl, getImage: gi, getLut: gl, safeZones: sz } = live.current;
     const el = videoRef.current;
     const frame: DrawableImage | null =
       el && live.current.video && el.readyState >= 2 && el.videoWidth
         ? { source: el, width: el.videoWidth, height: el.videoHeight }
         : null;
-    renderFrame(ctx, canvas.width, canvas.height, {
+    compositorRef.current.draw({
       project: p,
       timeline: tl,
       t: timeRef.current,
       getImage: gi,
+      getLut: gl,
       video: frame,
       safeZones: sz,
     });
   }, []);
+
+  useEffect(() => () => compositorRef.current?.dispose(), []);
 
   // Render loop.
   useEffect(() => {

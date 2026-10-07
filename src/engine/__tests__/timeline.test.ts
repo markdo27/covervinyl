@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildTimeline, fitDurations, formatTime, slideIndexAt, sourceTime } from '../timeline';
 
 const project = (durations: number[], end = 2, enabled = true) => ({
-  slides: durations.map((duration, i) => ({ id: String(i), coverId: null, text: '', morphFrom: '', duration })),
+  slides: durations.map((duration, i) => ({ id: String(i), coverId: null, texts: {}, morphFrom: '', duration })),
   endCard: { enabled, logoId: null, logoSize: 0.3, text: '', duration: end },
 });
 

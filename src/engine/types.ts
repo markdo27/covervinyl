@@ -9,16 +9,49 @@ export interface Slide {
   id: string;
   /** Asset id of the album cover image, or null to show a placeholder. */
   coverId: string | null;
-  /** Text shown under the cover, written in CoverVinyl markup (see markup.ts). */
-  text: string;
-  /** Optional text the slide starts with and morphs into `text` (the intro "jazzmatic" effect). */
+  /** Text for each per-slide section, keyed by section id, in CoverVinyl markup (see markup.ts). */
+  texts: Record<string, string>;
+  /**
+   * Optional text the slide's first per-slide section starts with and morphs
+   * into (the intro "jazzmatic" effect).
+   */
   morphFrom: string;
   /** Seconds this slide stays on screen (includes the transition into it). */
   duration: number;
 }
 
+/**
+ * A block of text stacked under the cover. Sections render top to bottom in
+ * list order; empty ones take no space.
+ */
+export interface TextSection {
+  id: string;
+  name: string;
+  /** 'slide': different text on every slide (animates per slide); 'shared': one text on every slide. */
+  mode: 'slide' | 'shared';
+  /** The text when mode is 'shared'. */
+  text: string;
+  /** Font size multiplier relative to the base text size. */
+  scale: number;
+  /** Space above the section, in body line heights. */
+  gap: number;
+}
+
+export interface PostSettings {
+  /** 'none', a preset key (see luts.ts) or 'custom:<id>' for an uploaded .cube file. */
+  lut: string;
+  /** 0..1 blend between the original and the graded image. */
+  lutIntensity: number;
+  /** 0..1 film grain strength. */
+  grain: number;
+  /** Grain particle size in pixels at 1080p. */
+  grainSize: number;
+  /** 0..1 darkening towards the frame edges. */
+  vignette: number;
+}
+
 export interface TextStyle {
-  /** Font family key (see fonts.ts) for body + footer text. */
+  /** Font family key (see fonts.ts) for regular text lines. */
   family: string;
   /** Font family key for `# headline` lines. */
   headlineFamily: string;
@@ -26,7 +59,6 @@ export interface TextStyle {
   /** Body font size as a fraction of the canvas width. */
   size: number;
   headlineScale: number;
-  footerScale: number;
   lineHeight: number;
   /** Letter spacing in em. */
   tracking: number;
@@ -97,15 +129,14 @@ export interface ExportSettings {
 export interface Project {
   ratio: Ratio;
   slides: Slide[];
-  footer: string;
-  /** Gap between slide text and footer, in body line heights. */
-  footerGap: number;
+  sections: TextSection[];
   text: TextStyle;
   cover: CoverStyle;
   placement: Record<Ratio, Placement>;
   video: VideoSettings;
   motion: MotionSettings;
   endCard: EndCard;
+  post: PostSettings;
   export: ExportSettings;
 }
 

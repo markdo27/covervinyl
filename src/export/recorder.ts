@@ -13,7 +13,8 @@ import {
   Output,
   WebMOutputFormat,
 } from 'mediabunny';
-import { renderFrame, type DrawableImage } from '../engine/renderer';
+import { Compositor } from '../engine/compositor';
+import type { DrawableImage } from '../engine/renderer';
 import { sourceTime } from '../engine/timeline';
 import { ExportAbortedError, type ExportJob, type ExportResult } from './types';
 
@@ -98,6 +99,7 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('Could not create a 2D canvas.');
   const stream = canvas.captureStream(fps);
+  const compositor = new Compositor(ctx);
 
   let video: HTMLVideoElement | null = null;
   let audioCtx: AudioContext | null = null;
@@ -145,7 +147,7 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
     const drawAt = (t: number) => {
       const frame: DrawableImage | null =
         video && video.readyState >= 2 ? { source: video, width: video.videoWidth, height: video.videoHeight } : null;
-      renderFrame(ctx, width, height, { project, timeline, t, getImage: job.getImage, video: frame });
+      compositor.draw({ project, timeline, t, getImage: job.getImage, getLut: job.getLut, video: frame });
     };
 
     drawAt(0);
@@ -211,6 +213,7 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
       video.load();
     }
     for (const track of stream.getTracks()) track.stop();
+    compositor.dispose();
     await audioCtx?.close().catch(() => undefined);
   }
 }

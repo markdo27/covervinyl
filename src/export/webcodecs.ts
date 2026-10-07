@@ -23,7 +23,8 @@ import {
   type VideoCodec,
   type WrappedCanvas,
 } from 'mediabunny';
-import { renderFrame, type DrawableImage } from '../engine/renderer';
+import { Compositor } from '../engine/compositor';
+import type { DrawableImage } from '../engine/renderer';
 import { sourceTime } from '../engine/timeline';
 import { throwIfAborted, type ExportJob, type ExportResult } from './types';
 
@@ -171,6 +172,7 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
   // 2. Open the background clip.
   let input: Input | null = null;
   let output: Output | null = null;
+  let compositor: Compositor | null = null;
   try {
     let sink: CanvasSink | null = null;
     let audioTrack: InputAudioTrack | null = null;
@@ -223,6 +225,7 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
     canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('Could not create a 2D canvas.');
+    compositor = new Compositor(ctx);
 
     const videoSource = new CanvasSource(canvas, {
       codec: videoCodec,
@@ -272,7 +275,7 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
         }
       }
       const t = i / fps;
-      renderFrame(ctx, width, height, { project, timeline, t, getImage: job.getImage, video: current });
+      compositor.draw({ project, timeline, t, getImage: job.getImage, getLut: job.getLut, video: current });
       await feedAudio(t + AUDIO_CHUNK_SECONDS);
       await videoSource.add(t, 1 / fps);
 
@@ -311,5 +314,6 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
     throw err;
   } finally {
     input?.dispose();
+    compositor?.dispose();
   }
 }
