@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { applyLutCpu, LOOKS, presetLut, type Lut } from '../../engine/luts';
 import { postSupported } from '../../engine/post';
-import type { Project } from '../../engine/types';
+import type { PostSettings } from '../../engine/types';
 import { PickFile, Section, Slider } from '../ui';
 
 interface Props {
-  project: Project;
-  update: (fn: (p: Project) => Project) => void;
+  step: number;
+  post: PostSettings;
+  setPost: (patch: Partial<PostSettings>) => void;
   customLuts: Lut[];
   onLutFile: (file: File) => void;
   onRemoveLut: (key: string) => void;
@@ -65,9 +66,7 @@ function thumbnail(lut: Lut | null): string {
   return url;
 }
 
-export function FiltersStep({ project, update, customLuts, onLutFile, onRemoveLut }: Props) {
-  const post = project.post;
-  const set = (patch: Partial<Project['post']>) => update((p) => ({ ...p, post: { ...p.post, ...patch } }));
+export function FiltersStep({ step, post, setPost: set, customLuts, onLutFile, onRemoveLut }: Props) {
   const supported = useMemo(postSupported, []);
   const looks = useMemo(
     () => [
@@ -80,7 +79,7 @@ export function FiltersStep({ project, update, customLuts, onLutFile, onRemoveLu
   const active = post.lut !== 'none' || post.grain > 0 || post.vignette > 0;
 
   return (
-    <Section step={5} title="Look & grain" subtitle="Cinematic colour, film grain and vignette" done={active}>
+    <Section step={step} title="Look & grain" subtitle="Cinematic colour, film grain and vignette" done={active}>
       {!supported && (
         <p className="note warn">This browser has no WebGL2, so filters can't be previewed or exported here.</p>
       )}

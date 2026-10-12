@@ -52,7 +52,7 @@ export function pickRecorderMime(): string | null {
   return MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? null;
 }
 
-function once<T extends Event>(target: EventTarget, event: string, signal?: AbortSignal): Promise<T> {
+export function once<T extends Event>(target: EventTarget, event: string, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(new ExportAbortedError());
     target.addEventListener(event, (e) => {
@@ -87,11 +87,37 @@ async function remux(blob: Blob, mp4: boolean): Promise<Blob | null> {
   }
 }
 
-export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> {
-  const { width, height, fps, project, timeline, signal, onProgress } = job;
+export interface RealtimeSession {
+  /** Draws the frame at time t (media elements are already playing). */
+  draw: (compositor: Compositor, t: number) => void;
+  /** Keeps media elements in step with the recording clock. */
+  sync?: (t: number) => void;
+  /** Starts media playback once recording begins. */
+  start?: () => Promise<void>;
+  dispose: () => void;
+}
+
+export interface RealtimeOptions {
+  width: number;
+  height: number;
+  fps: number;
+  total: number;
+  signal: AbortSignal;
+  onProgress: (progress: number, label: string) => void;
+  notes: string[];
+  /**
+   * Loads media and returns the session. `captureAudio` routes a media
+   * element's sound into the recording (returns false if that failed).
+   */
+  setup: (helpers: { captureAudio: (el: HTMLMediaElement) => boolean }) => Promise<RealtimeSession>;
+}
+
+/** Plays a scene in real time on an offscreen canvas and records it. */
+export async function recordRealtime(opts: RealtimeOptions): Promise<ExportResult> {
+  const { width, height, fps, total, signal, onProgress } = opts;
   const mimeType = pickRecorderMime();
   if (!mimeType) throw new Error('This browser cannot record video. Please use a recent Chrome, Edge, Safari or Firefox.');
-  const notes = ['Recorded in real time — keep this tab visible while exporting.'];
+  const notes = ['Recorded in real time — keep this tab visible while exporting.', ...opts.notes];
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -101,35 +127,28 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
   const stream = canvas.captureStream(fps);
   const compositor = new Compositor(ctx);
 
-  let video: HTMLVideoElement | null = null;
   let audioCtx: AudioContext | null = null;
+  let destination: MediaStreamAudioDestinationNode | null = null;
   let hasAudio = false;
-  const total = timeline.total;
-
-  try {
-    if (job.video) {
-      video = document.createElement('video');
-      video.src = job.video.url;
-      video.playsInline = true;
-      video.preload = 'auto';
-      video.muted = !project.video.audio;
-      await once(video, 'loadeddata', signal);
-      if (project.video.audio) {
-        try {
-          audioCtx = new AudioContext();
-          const src = audioCtx.createMediaElementSource(video);
-          const dest = audioCtx.createMediaStreamDestination();
-          src.connect(dest);
-          for (const track of dest.stream.getAudioTracks()) stream.addTrack(track);
-          hasAudio = true;
-        } catch {
-          notes.push("The clip's audio couldn't be captured, so the export is silent.");
-          video.muted = true;
-        }
+  const captureAudio = (el: HTMLMediaElement): boolean => {
+    try {
+      audioCtx ??= new AudioContext();
+      if (!destination) {
+        destination = audioCtx.createMediaStreamDestination();
+        for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
       }
-      video.currentTime = project.video.start;
-      await once(video, 'seeked', signal);
+      audioCtx.createMediaElementSource(el).connect(destination);
+      hasAudio = true;
+      return true;
+    } catch {
+      return false;
     }
+  };
+
+  let session: RealtimeSession | null = null;
+  try {
+    session = await opts.setup({ captureAudio });
+    const s = session;
 
     const recorder = new MediaRecorder(stream, {
       mimeType,
@@ -141,18 +160,9 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
       if (e.data.size) chunks.push(e.data);
     };
 
-    const clip = video
-      ? { start: project.video.start, loop: project.video.loop, duration: video.duration, frameStep: 1 / fps }
-      : null;
-    const drawAt = (t: number) => {
-      const frame: DrawableImage | null =
-        video && video.readyState >= 2 ? { source: video, width: video.videoWidth, height: video.videoHeight } : null;
-      compositor.draw({ project, timeline, t, getImage: job.getImage, getLut: job.getLut, video: frame });
-    };
-
-    drawAt(0);
-    await audioCtx?.resume();
-    if (video) await video.play();
+    s.draw(compositor, 0);
+    await (audioCtx as AudioContext | null)?.resume();
+    await s.start?.();
     recorder.start(250);
     const t0 = performance.now();
 
@@ -164,17 +174,12 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
         }
         const t = (performance.now() - t0) / 1000;
         if (t >= total) {
-          drawAt(total - 1 / fps);
+          s.draw(compositor, total - 1 / fps);
           resolve();
           return;
         }
-        if (video && clip) {
-          const expected = sourceTime(t, clip);
-          const drift = Math.abs(video.currentTime - expected);
-          if (drift > 0.25 && !video.seeking) video.currentTime = expected;
-          if (video.paused && !video.ended && clip.loop) void video.play().catch(() => undefined);
-        }
-        drawAt(t);
+        s.sync?.(t);
+        s.draw(compositor, t);
         onProgress(t / total, `Recording ${t.toFixed(1)}s / ${total.toFixed(1)}s (real time)`);
         requestAnimationFrame(tick);
       };
@@ -207,13 +212,69 @@ export async function exportWithRecorder(job: ExportJob): Promise<ExportResult> 
       notes,
     };
   } finally {
-    video?.pause();
-    if (video) {
-      video.removeAttribute('src');
-      video.load();
-    }
+    session?.dispose();
     for (const track of stream.getTracks()) track.stop();
     compositor.dispose();
-    await audioCtx?.close().catch(() => undefined);
+    await (audioCtx as AudioContext | null)?.close().catch(() => undefined);
   }
+}
+
+/** Releases a media element created for export. */
+export function releaseMedia(el: HTMLMediaElement | null): void {
+  if (!el) return;
+  el.pause();
+  el.removeAttribute('src');
+  el.load();
+}
+
+/** Real-time export for the cover-crate mode. */
+export function exportWithRecorder(job: ExportJob): Promise<ExportResult> {
+  const { width, height, fps, project, timeline, signal, onProgress } = job;
+  const notes: string[] = [];
+  return recordRealtime({
+    width,
+    height,
+    fps,
+    total: timeline.total,
+    signal,
+    onProgress,
+    notes,
+    setup: async ({ captureAudio }) => {
+      let video: HTMLVideoElement | null = null;
+      if (job.video) {
+        video = document.createElement('video');
+        video.src = job.video.url;
+        video.playsInline = true;
+        video.preload = 'auto';
+        video.muted = !project.video.audio;
+        await once(video, 'loadeddata', signal);
+        if (project.video.audio && !captureAudio(video)) {
+          notes.push("The clip's audio couldn't be captured, so the export is silent.");
+          video.muted = true;
+        }
+        video.currentTime = project.video.start;
+        await once(video, 'seeked', signal);
+      }
+      const clip = video
+        ? { start: project.video.start, loop: project.video.loop, duration: video.duration, frameStep: 1 / fps }
+        : null;
+      return {
+        draw: (compositor, t) => {
+          const frame: DrawableImage | null =
+            video && video.readyState >= 2 ? { source: video, width: video.videoWidth, height: video.videoHeight } : null;
+          compositor.draw({ project, timeline, t, getImage: job.getImage, getLut: job.getLut, video: frame });
+        },
+        sync: (t) => {
+          if (!video || !clip) return;
+          const expected = sourceTime(t, clip);
+          if (Math.abs(video.currentTime - expected) > 0.25 && !video.seeking) video.currentTime = expected;
+          if (video.paused && !video.ended && clip.loop) void video.play().catch(() => undefined);
+        },
+        start: async () => {
+          if (video) await video.play();
+        },
+        dispose: () => releaseMedia(video),
+      };
+    },
+  });
 }
