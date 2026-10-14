@@ -24,16 +24,16 @@ function project(patch: Partial<FlipProject> = {}): FlipProject {
 }
 
 describe('sample flip timing', () => {
-  it('plays the new track first by default, then the original, then the closing card', () => {
+  it('plays the new track first by default, then the original, then the end card', () => {
     const tl = buildFlipTimeline(project());
     expect(tl.order).toEqual([NEW, ORIGINAL]);
     expect(tl.parts[NEW]).toEqual({ start: 0, end: 6 });
     expect(tl.parts[ORIGINAL]).toEqual({ start: 6, end: 11 });
     expect(tl.outroStart).toBe(11);
-    expect(tl.total).toBe(14);
+    expect(tl.total).toBe(13.5);
   });
 
-  it('can start with the original and skip the closing card', () => {
+  it('can start with the original and skip the end card', () => {
     const p = project({ first: 'original' });
     p.outro = { ...p.outro, enabled: false };
     const tl = buildFlipTimeline(p);
@@ -62,7 +62,7 @@ describe('sample flip timing', () => {
     expect(flipLayersAt(p, tl, 6.5).flash).toBe(0);
   });
 
-  it('keeps the last clip running under the closing card', () => {
+  it('keeps the last clip running under the end card', () => {
     const p = project();
     const tl = buildFlipTimeline(p);
     const end = flipLayersAt(p, tl, 13);
@@ -136,7 +136,7 @@ describe('sample flip presets', () => {
 
     const target = defaultFlip();
     target.parts[NEW] = { ...target.parts[NEW], assetId: 'mine', coverId: 'my-cover', start: 3 };
-    const ctx = { lutKey: null, hasFont: () => true };
+    const ctx = { lutKey: null, logoId: null, hasFont: () => true };
     const credits = applyFlipPreset(target, preset.settings, new Set<PresetGroup>(['credits']), ctx);
     expect(credits.parts[NEW]).toMatchObject({ title: 'Hypnotize', artist: 'The Notorious B.I.G.', assetId: 'mine', coverId: 'my-cover', start: 3 });
     expect(credits.parts[NEW].volume).toBe(1);
@@ -146,6 +146,22 @@ describe('sample flip presets', () => {
     expect(all.transition).toBe('fade');
     expect(all.accent).toBe('#7fd1c7');
     expect(all.parts[NEW]).toMatchObject({ duration: 6, volume: 0.4, assetId: 'mine', start: 3 });
+    expect(all.outro).toEqual(target.outro);
+  });
+
+  it('applies the end card with its logo, keeping the current logo when the preset has none', () => {
+    const source = project();
+    source.outro = { ...source.outro, logoId: 'their-logo', logoColor: '#e2402f', logoSize: 0.4, text: '**crate** diggers', duration: 4 };
+    const settings = flipPresetSettings(source);
+    expect('logoId' in settings.outro).toBe(false);
+    const target = defaultFlip();
+    target.outro = { ...target.outro, logoId: 'my-logo' };
+    const groups = new Set<PresetGroup>(['endCard']);
+    const kept = applyFlipPreset(target, settings, groups, { lutKey: null, logoId: null, hasFont: () => true });
+    expect(kept.outro).toEqual({ ...source.outro, logoId: 'my-logo' });
+    const loaded = applyFlipPreset(target, settings, groups, { lutKey: null, logoId: 'loaded-logo', hasFont: () => true });
+    expect(loaded.outro.logoId).toBe('loaded-logo');
+    expect(loaded.parts).toEqual(target.parts);
   });
 
   it('repairs invalid values', () => {

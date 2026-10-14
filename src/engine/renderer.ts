@@ -497,7 +497,7 @@ function drawEndCard(f: Frame, getImage: RenderInput['getImage'], d: number): vo
 const tintCache = new WeakMap<object, Map<string, HTMLCanvasElement>>();
 
 /** The image with every visible pixel painted `color`, keeping its transparency (cached). */
-function tintedImage(img: DrawableImage, color: string): HTMLCanvasElement {
+export function tintedImage(img: DrawableImage, color: string): HTMLCanvasElement {
   let byColor = tintCache.get(img.source);
   if (!byColor) {
     byColor = new Map();
