@@ -27,6 +27,7 @@ function useEscape(onClose: () => void, enabled: boolean) {
 const MEDIA_NOTE: Record<Preset['mode'], string> = {
   cover: 'Your clip and covers',
   reel: 'Your photos, clips and music',
+  flip: 'Your clips and covers',
 };
 
 const modeLabel = (mode: Preset['mode']) => MODES.find((m) => m.value === mode)?.label ?? mode;
@@ -66,7 +67,7 @@ export function SavePresetDialog(props: {
       >
         <h2 id="save-preset-title">Save preset</h2>
         <p className="note">
-          Saves your {modeLabel(props.mode)} {props.mode === 'cover' ? 'settings and text' : 'settings'} as a <code>.json</code>{' '}
+          Saves your {modeLabel(props.mode)} {props.mode === 'reel' ? 'settings' : 'settings and text'} as a <code>.json</code>{' '}
           file. Open it any time with <strong>Load preset</strong>. {MEDIA_NOTE[props.mode]} aren’t included.
         </p>
         <label className="preset-name" htmlFor={nameId}>

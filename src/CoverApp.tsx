@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { usePresetDialogs, type Attachment } from './components/PresetDialogs';
 import { Preview, type PreviewController } from './components/Preview';
 import { TopBar, useExportRunner, useNotice, useUnsavedWarning, type ModeProps } from './components/shell';
+import { useLooks } from './components/useLooks';
+import { useUserFonts } from './components/useUserFonts';
 import { CoversStep } from './components/steps/CoversStep';
 import { ExportStep } from './components/steps/ExportStep';
 import { FiltersStep } from './components/steps/FiltersStep';
@@ -9,31 +11,13 @@ import { FontsStep } from './components/steps/FontsStep';
 import { TextStep } from './components/steps/TextStep';
 import { VideoStep } from './components/steps/VideoStep';
 import { defaultProject, newSlide, OUTPUT_SIZES } from './engine/defaults';
-import {
-  BUILT_IN_FONTS,
-  ensureFontsLoaded,
-  fontStack,
-  loadUserFont,
-  unloadUserFont,
-  USER_FONT_PREFIX,
-  userFontKey,
-  type UserFontFace,
-} from './engine/fonts';
-import { CUSTOM_LUT_PREFIX } from './engine/luts';
-import { clearPlaceholderCache } from './engine/placeholder';
-import {
-  applyCoverPreset,
-  coverPresetSettings,
-  embedLut,
-  makePreset,
-  unembedLut,
-  type PresetFiles,
-} from './engine/presets';
+import { ensureFontsLoaded, fontStack, userFontKey } from './engine/fonts';
+import { applyCoverPreset, coverPresetSettings, embedLut, makePreset, type PresetFiles } from './engine/presets';
 import type { DrawableImage } from './engine/renderer';
 import { morphSection, PLACEHOLDER_CREDITS } from './engine/sections';
 import { clearLayoutCache } from './engine/textLayout';
 import { buildTimeline } from './engine/timeline';
-import type { ImageAsset, Placement, Project, VideoAsset } from './engine/types';
+import type { ImageAsset, Placement, PostSettings, Project, VideoAsset } from './engine/types';
 import { loadImageFile, loadVideoFile } from './lib/media';
 import { embedFile, unembedFile } from './lib/presetFiles';
 
@@ -42,14 +26,16 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
   const [project, setProject] = useState<Project>(defaultProject);
   const [images, setImages] = useState<Map<string, ImageAsset>>(() => new Map());
   const [video, setVideo] = useState<VideoAsset | null>(null);
-  const [fonts, setFonts] = useState<UserFontFace[]>([]);
-  const [fontEpoch, setFontEpoch] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const previewRef = useRef<PreviewController | null>(null);
   const { flash, toast } = useNotice();
   const exporter = useExportRunner(flash);
+  const userFonts = useUserFonts(flash);
+  const { fonts, fontEpoch } = userFonts;
 
   const update = useCallback((fn: (p: Project) => Project) => setProject(fn), []);
+  const setPost = useCallback((patch: Partial<PostSettings>) => update((p) => ({ ...p, post: { ...p.post, ...patch } })), [update]);
+  const looks = useLooks(luts, project.post, setPost, flash);
   const timeline = useMemo(() => buildTimeline(project), [project]);
 
   const getImage = useCallback(
@@ -62,18 +48,6 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
   );
 
   const getLut = luts.get;
-
-  // Re-measure text whenever a font finishes loading.
-  useEffect(() => {
-    const onFontsLoaded = () => {
-      clearLayoutCache();
-      clearPlaceholderCache();
-      setFontEpoch((e) => e + 1);
-    };
-    document.fonts.addEventListener('loadingdone', onFontsLoaded);
-    void ensureFontsLoaded([fontStack('inter')], [300, 400, 700, 800]).then(onFontsLoaded);
-    return () => document.fonts.removeEventListener('loadingdone', onFontsLoaded);
-  }, []);
 
   useUnsavedWarning(!!video || images.size > 0 || fonts.length > 0);
 
@@ -143,27 +117,16 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
   };
 
   const onFontFiles = async (files: File[]) => {
-    const loaded: UserFontFace[] = [];
-    for (const file of files) {
-      try {
-        loaded.push(await loadUserFont(file));
-      } catch {
-        flash('error', `Couldn't read “${file.name}” as a font.`);
-      }
-    }
+    const loaded = await userFonts.addFiles(files);
     if (!loaded.length) return;
-    setFonts((old) => [...old, ...loaded]);
     const family = loaded[0].family;
     // Switch to the new font straight away — that's almost always what people want.
     update((p) => ({ ...p, text: { ...p.text, family: userFontKey(family), headlineFamily: userFontKey(family) } }));
-    clearLayoutCache();
-    setFontEpoch((e) => e + 1);
     flash('info', `Loaded ${loaded.length} font file${loaded.length > 1 ? 's' : ''} · using “${family}”.`);
   };
 
   const onRemoveFamily = (family: string) => {
-    fonts.filter((f) => f.family === family).forEach(unloadUserFont);
-    setFonts((old) => old.filter((f) => f.family !== family));
+    userFonts.removeFamily(family);
     const key = userFontKey(family);
     update((p) => ({
       ...p,
@@ -173,39 +136,11 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
         headlineFamily: p.text.headlineFamily === key ? 'inter' : p.text.headlineFamily,
       },
     }));
-    clearLayoutCache();
-    setFontEpoch((e) => e + 1);
   };
-
-  const onLutFile = async (file: File) => {
-    try {
-      const lut = await luts.addFile(file);
-      update((p) => ({ ...p, post: { ...p.post, lut: lut.key, lutIntensity: 1 } }));
-      flash('info', `Loaded LUT “${lut.name}” (${lut.size}³).`);
-    } catch (err) {
-      flash('error', `Couldn't load “${file.name}”: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const onRemoveLut = (key: string) => {
-    luts.remove(key);
-    update((p) => (p.post.lut === key ? { ...p, post: { ...p.post, lut: 'none' } } : p));
-  };
-
-  // A LUT removed in the other mode falls back to no look here too.
-  useEffect(() => {
-    if (project.post.lut.startsWith('custom:') && !luts.get(project.post.lut)) {
-      update((p) => ({ ...p, post: { ...p.post, lut: 'none' } }));
-    }
-  }, [luts, project.post.lut, update]);
 
   /* ---------------- Presets ---------------- */
 
-  const usedFontFiles = () => {
-    const used = new Set([project.text.family, project.text.headlineFamily]);
-    return fonts.filter((f) => used.has(userFontKey(f.family)));
-  };
-  const customLut = () => (project.post.lut.startsWith(CUSTOM_LUT_PREFIX) ? luts.get(project.post.lut) : null);
+  const usedFontFiles = () => userFonts.filesFor(project.text);
   const logoAsset = () => (project.endCard.logoId ? images.get(project.endCard.logoId) : undefined);
 
   const presets = usePresetDialogs({
@@ -226,8 +161,8 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
           bytes: fontFiles.reduce((sum, f) => sum + f.file.size, 0),
         });
       }
-      const lut = customLut();
-      if (lut) list.push({ key: 'lut', label: `LUT: ${lut.name}`, detail: `Your .cube look (${lut.size}³)`, bytes: lut.size ** 3 * 3 });
+      const lut = looks.lutAttachment();
+      if (lut) list.push(lut);
       const logo = logoAsset();
       if (logo) list.push({ key: 'logo', label: `Logo: ${logo.name}`, detail: 'End-card logo', bytes: logo.file.size });
       return list;
@@ -236,7 +171,7 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
       const files: PresetFiles = {};
       const fontFiles = usedFontFiles();
       if (include.has('fonts') && fontFiles.length) files.fonts = await Promise.all(fontFiles.map((f) => embedFile(f.file)));
-      const lut = customLut();
+      const lut = looks.customLut();
       if (include.has('lut') && lut) files.lut = embedLut(lut);
       const logo = logoAsset();
       if (include.has('logo') && logo) files.logo = await embedFile(logo.file);
@@ -248,31 +183,11 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
       const warnings: string[] = [];
 
       // Fonts the preset carries, skipping files that are already loaded.
-      const available = new Set(fonts.map((f) => f.family));
-      if (groups.has('style') && preset.files.fonts) {
-        const loaded: UserFontFace[] = [];
-        for (const embedded of preset.files.fonts) {
-          const file = await unembedFile(embedded);
-          if (fonts.some((f) => f.fileName === file.name && f.file.size === file.size)) continue;
-          try {
-            loaded.push(await loadUserFont(file));
-          } catch {
-            warnings.push(`couldn't read the font “${file.name}”.`);
-          }
-        }
-        if (loaded.length) {
-          setFonts((old) => [...old, ...loaded]);
-          loaded.forEach((f) => available.add(f.family));
-          clearLayoutCache();
-          setFontEpoch((e) => e + 1);
-        }
-      }
-      const hasFont = (key: string) =>
-        key.startsWith(USER_FONT_PREFIX) ? available.has(key.slice(USER_FONT_PREFIX.length)) : BUILT_IN_FONTS.some((f) => f.key === key);
-      if (groups.has('style')) {
-        const missing = [...new Set([s.text.family, s.text.headlineFamily])].filter((k) => !hasFont(k));
-        if (missing.length) warnings.push(`the font “${missing[0].replace(USER_FONT_PREFIX, '')}” wasn't saved with it, so Inter is used.`);
-      }
+      const fontsLoaded = await userFonts.loadEmbedded(groups.has('style') ? preset.files.fonts : undefined);
+      const { hasFont } = fontsLoaded;
+      warnings.push(...fontsLoaded.warnings);
+      const fontWarning = groups.has('style') ? userFonts.missingFontWarning(s.text, hasFont) : null;
+      if (fontWarning) warnings.push(fontWarning);
 
       let logoId: string | null = null;
       if (groups.has('endCard') && preset.files.logo) {
@@ -281,9 +196,10 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
       }
 
       let lutKey: string | null = null;
-      if (groups.has('look') && preset.files.lut) lutKey = luts.adopt(unembedLut(preset.files.lut, '')).key;
-      if (groups.has('look') && s.post.lut.startsWith(CUSTOM_LUT_PREFIX) && !lutKey) {
-        warnings.push(`its own LUT wasn't saved with it, so no colour look is applied.`);
+      if (groups.has('look')) {
+        const look = looks.adoptPresetLut(preset.files.lut, s.post.lut);
+        lutKey = look.lutKey;
+        if (look.warning) warnings.push(look.warning);
       }
 
       update((p) => applyCoverPreset(p, s, groups, { lutKey, logoId, hasFont }));
@@ -372,14 +288,21 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
             onSelectSlide={selectSlide}
           />
           <TextStep project={project} update={update} images={images} activeSlide={activeSlide} onSelectSlide={selectSlide} />
-          <FontsStep project={project} update={update} fonts={fonts} onFontFiles={onFontFiles} onRemoveFamily={onRemoveFamily} />
+          <FontsStep
+            step={4}
+            text={project.text}
+            setText={(patch) => update((p) => ({ ...p, text: { ...p.text, ...patch } }))}
+            fonts={fonts}
+            onFontFiles={onFontFiles}
+            onRemoveFamily={onRemoveFamily}
+          />
           <FiltersStep
             step={5}
             post={project.post}
-            setPost={(patch) => update((p) => ({ ...p, post: { ...p.post, ...patch } }))}
+            setPost={setPost}
             customLuts={luts.custom}
-            onLutFile={onLutFile}
-            onRemoveLut={onRemoveLut}
+            onLutFile={looks.onLutFile}
+            onRemoveLut={looks.onRemoveLut}
           />
           <ExportStep
             project={project}

@@ -1920,3 +1920,149 @@ select.section-mode {
   pointer-events: none;
   z-index: -1;
 }
+
+/* ------------------------------------------------------------------ */
+/* Sample Flip                                                         */
+/* ------------------------------------------------------------------ */
+
+.mode-short {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .mode-tabs .mode-label {
+    display: none;
+  }
+  .mode-tabs .mode-short {
+    display: inline;
+  }
+}
+
+.flip-part-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 650;
+  font-size: 14px;
+  text-align: left;
+  min-width: 0;
+}
+
+.flip-part-title small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.flip-part-title .step-num {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.flip-thumb {
+  background-color: var(--panel-3);
+  background-size: cover;
+  background-position: center;
+}
+
+.flip-part-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.flip-part-row .number-field {
+  width: 130px;
+}
+
+.flip-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.flip-cover {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  border-radius: 6px;
+  background: var(--panel-3) center / cover no-repeat;
+  border: 1px solid var(--line-2);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.flip-cover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flip-cover-actions small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.inline-buttons .btn-link {
+  align-self: center;
+}
+
+.flip-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.text-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.text-field input {
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13.5px;
+  width: 100%;
+}
+
+.text-section .text-field input {
+  background: var(--panel);
+}
+
+.text-field input:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+
+.text-field input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}

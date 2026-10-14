@@ -1,6 +1,6 @@
 # CoverVinyl
 
-Make vinyl-flavoured Instagram reels from your own footage. Two editors, switchable from the
+Make vinyl-flavoured Instagram reels from your own footage. Three editors, switchable from the
 top bar:
 
 - **Cover Crate** — your clip plays in the background, a stack of album covers flips forward
@@ -8,6 +8,8 @@ top bar:
   underneath.
 - **Photo Reel** — your photos and clips cut on the beat, with your own animation (with
   transparency) looping on top, graded with film looks and grain.
+- **Sample Flip** — two clips back to back: a track and the original it samples, each with its
+  own cover and credits, then both covers side by side.
 
 Both export a 9:16 or 3:4 video ready for Instagram.
 
@@ -27,7 +29,9 @@ Everything runs in the browser. Files are never uploaded anywhere.
 | **6. Duration & export** | Set how long each cover stays on screen (or match the clip length), add an end card with your logo (optionally recoloured to any colour), pick **9:16** (1080×1920) or **3:4** (1080×1440) and export. |
 
 Drag the preview to move the cover + text block. Space bar plays / pauses. "Safe zones"
-shows where Instagram's UI covers a Reel.
+shows where Instagram's UI covers a Reel. With *Keep text inside Instagram's safe zone* (step 3,
+on by default) lines wrap before the like / comment / share buttons and long text is lifted
+above the caption.
 
 ## Photo Reel
 
@@ -50,13 +54,28 @@ again — in the same editor it was saved from, switching modes if needed.
 - **Cover Crate** presets hold the text style and layout, look & grain, text sections, every
   slide's text and duration, and the end card. **Photo Reel** presets hold the animation-on-top
   settings, look & grain, and timing & format (shot length, BPM, transition, zoom, music volume,
-  ratio, export).
+  ratio, export). **Sample Flip** presets hold the text style and layout, look & grain, both
+  tracks' credits (plus the opening line and closing text), and the clip lengths and volumes.
 - Your own files can ride along inside the preset — uploaded fonts, a `.cube` LUT, the end-card
   logo, the overlay animation — so it works on another computer too. The save dialog lists them
   with their sizes; untick any you don't need.
 - Clips, covers, photos and music are never included, and loading a preset keeps them. When
   loading you pick which parts to apply; slide text goes onto your current slides in order,
   keeping their covers.
+
+## Sample Flip
+
+| Step | What you do |
+| --- | --- |
+| **1. The two clips** | Upload a clip (or photo) for the new track and one for the original it samples. Each plays with its own sound; set where it starts, how long it's on screen and its volume. Choose which plays first (new track first by default) and how they switch: push, fade, flash or cut. |
+| **2. Credits** | For each track: album cover, tag (NEW / ORIGINAL), title, artist, release date, album, genre and a short story. Labels ("Released", "Album", "Genre") can be renamed or hidden. An optional opening line ("the sample behind **{new}**") shows before the first credits. |
+| **3. Layout & text style** | Credits at the top, middle or bottom, cover size, text sizes, colours, tag colour and a dark backdrop behind the text. *Keep text inside Instagram's safe zone* (on by default) keeps everything clear of Instagram's UI and shrinks long text to fit. |
+| **4. Fonts** | Your own fonts, as in Cover Crate. |
+| **5. Look & grain** | Colour looks / `.cube` LUTs, grain and vignette on the clips (optionally on the text too). |
+| **6. Closing card & export** | Both covers side by side (original → new) with your own line underneath, then 9:16 or 3:4 export. |
+
+`{new}`, `{original}`, `{new-artist}`, `{original-artist}`, `{new-year}` and `{original-year}`
+fill in from the credits in the opening line and the closing card.
 
 ### Text markup
 
@@ -78,7 +97,7 @@ Produced by {#e2402f}**DJ Premier**{/}
 
 - **Fast (default):** frames are decoded and encoded with WebCodecs (via
   [Mediabunny](https://mediabunny.dev)), faster than real time and frame-accurate — including
-  every reel clip, the alpha channel of a WebM overlay, and the soundtrack.
+  every reel clip, the alpha channel of a WebM overlay, the soundtrack, and both Sample Flip clips with their sound.
   Produces **H.264 + AAC MP4** in Chrome, Edge and Safari. Browsers without a native AAC
   encoder use a bundled WebAssembly one.
 - **Fallback:** if the browser can't decode the clip or encode with WebCodecs, the edit is
@@ -91,7 +110,7 @@ Produced by {#e2402f}**DJ Premier**{/}
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel, presets)
+npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel, flip, presets)
 npm run build      # static site in dist/
 ```
 
@@ -113,6 +132,11 @@ src/engine/      rendering engine (framework-free)
   reelRenderer.ts  Photo Reel frame: shots, slow zoom, flash, overlay, demo animation
   overlay.ts       overlay uploads: alpha video, PNG sequence, GIF/APNG/WebP, still
   reelMedia.ts     keeps reel clips / overlay / soundtrack elements in sync with the playhead
+  flip.ts          Sample Flip model, defaults, timing, transitions and the clips' crossfade
+  flipRenderer.ts  Sample Flip frame: clips, credits layout, opening line, closing card
+  flipMedia.ts     keeps the two Sample Flip clips (with sound) in sync with the playhead
+  safeZone.ts      Instagram's safe area, lifting text out of the caption zone, guides
+  textDraw.ts      drawing laid-out text lines (shadow, motion smear)
   textLayout.ts    rich-text layout + word wrap on canvas
   markup.ts        **bold** / *italic* / ~light~ / # headline parser
   morph.ts         character morph between two titles (LCS matching)
@@ -124,10 +148,10 @@ src/engine/      rendering engine (framework-free)
   compositor.ts    layered frame + post pass, shared by previews and exporters
   presets.ts       preset JSON format: capture, validate and apply settings per editor
 src/export/      encoder.ts (shared WebCodecs plumbing), webcodecs.ts + recorder.ts (Cover
-                 Crate, fast + real-time), reel.ts (Photo Reel, fast + real-time)
+                 Crate, fast + real-time), reel.ts (Photo Reel), flip.ts (Sample Flip)
 src/components/  React UI: Player (shared preview shell), steps for each mode, export + preset dialogs
 src/lib/         file loading (media.ts) and preset files (presetFiles.ts)
-src/CoverApp.tsx, src/ReelApp.tsx   the two editors; App.tsx switches between them
+src/CoverApp.tsx, src/ReelApp.tsx, src/FlipApp.tsx   the three editors; App.tsx switches between them
 ```
 
 The preview and the exporters share the same compositor, so what you see is exactly what you get.

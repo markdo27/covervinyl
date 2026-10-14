@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { PlayerController } from './components/Player';
 import { MediaStep } from './components/reel/MediaStep';
 import { MusicStep } from './components/reel/MusicStep';
@@ -7,13 +7,14 @@ import { ReelExportStep } from './components/reel/ReelExportStep';
 import { ReelPreview } from './components/reel/ReelPreview';
 import { usePresetDialogs, type Attachment } from './components/PresetDialogs';
 import { TopBar, useExportRunner, useNotice, useUnsavedWarning, type ModeProps } from './components/shell';
+import { useLooks } from './components/useLooks';
 import { FiltersStep } from './components/steps/FiltersStep';
 import { OUTPUT_SIZES } from './engine/defaults';
-import { CUSTOM_LUT_PREFIX } from './engine/luts';
 import { loadOverlayFiles, overlayFiles, releaseOverlay, type OverlayAsset } from './engine/overlay';
-import { applyReelPreset, embedLut, makePreset, reelPresetSettings, unembedLut, type PresetFiles } from './engine/presets';
+import { applyReelPreset, embedLut, makePreset, reelPresetSettings, type PresetFiles } from './engine/presets';
 import { buildReelTimeline, defaultReel, newReelItem, type MediaAsset, type ReelProject } from './engine/reel';
 import type { MusicAsset } from './engine/reelMedia';
+import type { PostSettings } from './engine/types';
 import { isVideoFile, loadMusicFile, loadReelMedia } from './lib/media';
 import { embedFile, unembedFile } from './lib/presetFiles';
 
@@ -32,6 +33,8 @@ export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPre
   const exporter = useExportRunner(flash);
 
   const update = useCallback((fn: (p: ReelProject) => ReelProject) => setProject(fn), []);
+  const setPost = useCallback((patch: Partial<PostSettings>) => update((p) => ({ ...p, post: { ...p.post, ...patch } })), [update]);
+  const looks = useLooks(luts, project.post, setPost, flash);
   const timeline = useMemo(() => buildReelTimeline(project.items), [project.items]);
   const mediaById = useMemo(() => new Map(media.map((m) => [m.id, m])), [media]);
   const getMedia = useCallback((id: string | null) => (id ? (mediaById.get(id) ?? null) : null), [mediaById]);
@@ -102,31 +105,7 @@ export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPre
     }
   };
 
-  const onLutFile = async (file: File) => {
-    try {
-      const lut = await luts.addFile(file);
-      update((p) => ({ ...p, post: { ...p.post, lut: lut.key, lutIntensity: 1 } }));
-      flash('info', `Loaded LUT “${lut.name}” (${lut.size}³).`);
-    } catch (err) {
-      flash('error', `Couldn't load “${file.name}”: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const onRemoveLut = (key: string) => {
-    luts.remove(key);
-    update((p) => (p.post.lut === key ? { ...p, post: { ...p.post, lut: 'none' } } : p));
-  };
-
-  // A LUT removed in the other mode falls back to no look here too.
-  useEffect(() => {
-    if (project.post.lut.startsWith('custom:') && !luts.get(project.post.lut)) {
-      update((p) => ({ ...p, post: { ...p.post, lut: 'none' } }));
-    }
-  }, [luts, project.post.lut, update]);
-
   /* ---------------- Presets ---------------- */
-
-  const customLut = () => (project.post.lut.startsWith(CUSTOM_LUT_PREFIX) ? luts.get(project.post.lut) : null);
 
   const presets = usePresetDialogs({
     mode: 'reel',
@@ -145,14 +124,14 @@ export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPre
           bytes: files.reduce((sum, f) => sum + f.size, 0),
         });
       }
-      const lut = customLut();
-      if (lut) list.push({ key: 'lut', label: `LUT: ${lut.name}`, detail: `Your .cube look (${lut.size}³)`, bytes: lut.size ** 3 * 3 });
+      const lut = looks.lutAttachment();
+      if (lut) list.push(lut);
       return list;
     },
     build: async (name, include) => {
       const files: PresetFiles = {};
       if (include.has('overlay') && overlay) files.overlay = await Promise.all(overlayFiles(overlay).map(embedFile));
-      const lut = customLut();
+      const lut = looks.customLut();
       if (include.has('lut') && lut) files.lut = embedLut(lut);
       return makePreset(name, { mode: 'reel', settings: reelPresetSettings(project) }, files);
     },
@@ -174,9 +153,10 @@ export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPre
       }
 
       let lutKey: string | null = null;
-      if (groups.has('look') && preset.files.lut) lutKey = luts.adopt(unembedLut(preset.files.lut, '')).key;
-      if (groups.has('look') && s.post.lut.startsWith(CUSTOM_LUT_PREFIX) && !lutKey) {
-        warnings.push(`its own LUT wasn't saved with it, so no colour look is applied.`);
+      if (groups.has('look')) {
+        const look = looks.adoptPresetLut(preset.files.lut, s.post.lut);
+        lutKey = look.lutKey;
+        if (look.warning) warnings.push(look.warning);
       }
 
       update((p) => applyReelPreset(p, s, groups, { lutKey }));
@@ -272,10 +252,10 @@ export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPre
           <FiltersStep
             step={4}
             post={project.post}
-            setPost={(patch) => update((p) => ({ ...p, post: { ...p.post, ...patch } }))}
+            setPost={setPost}
             customLuts={luts.custom}
-            onLutFile={onLutFile}
-            onRemoveLut={onRemoveLut}
+            onLutFile={looks.onLutFile}
+            onRemoveLut={looks.onRemoveLut}
           />
           <ReelExportStep project={project} update={update} timeline={timeline} onExport={onExport} exporting={exporter.exporting} />
           <footer className="credits">Everything runs in your browser — your files never leave your device.</footer>

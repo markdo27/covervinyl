@@ -1,23 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CoverApp } from './CoverApp';
-import type { LutLibrary, Mode } from './components/shell';
+import { FlipApp } from './FlipApp';
+import { MODES, type LutLibrary, type Mode } from './components/shell';
 import { uid } from './engine/defaults';
 import { CUSTOM_LUT_PREFIX, parseCubeLut, presetLut, type Lut } from './engine/luts';
 import { sameLut, type Preset } from './engine/presets';
 import { ReelApp } from './ReelApp';
 
+const modeFromHash = (): Mode => MODES.find((m) => m.value !== 'cover' && window.location.hash === `#${m.value}`)?.value ?? 'cover';
+
 /**
- * Two editors share the app: "Cover Crate" (album covers + credits over a
- * clip) and "Photo Reel" (beat-cut photos/clips with an animation on top).
- * Both stay mounted so switching keeps each one's work.
+ * Three editors share the app: "Cover Crate" (album covers + credits over a
+ * clip), "Photo Reel" (beat-cut photos/clips with an animation on top) and
+ * "Sample Flip" (a new track and the original it samples, back to back).
+ * All stay mounted so switching keeps each one's work.
  */
 export default function App() {
-  const [mode, setMode] = useState<Mode>(() => (window.location.hash === '#reel' ? 'reel' : 'cover'));
+  const [mode, setMode] = useState<Mode>(modeFromHash);
   const [customLuts, setCustomLuts] = useState<Lut[]>([]);
   const [pendingPreset, setPendingPreset] = useState<Preset | null>(null);
 
   useEffect(() => {
-    const url = `${window.location.pathname}${window.location.search}${mode === 'reel' ? '#reel' : ''}`;
+    const url = `${window.location.pathname}${window.location.search}${mode === 'cover' ? '' : `#${mode}`}`;
     window.history.replaceState(null, '', url);
   }, [mode]);
 
@@ -59,6 +63,7 @@ export default function App() {
     <>
       <CoverApp active={mode === 'cover'} {...shared} />
       <ReelApp active={mode === 'reel'} {...shared} />
+      <FlipApp active={mode === 'flip'} {...shared} />
     </>
   );
 }

@@ -74,6 +74,12 @@ export function TextStep({ project, update, images, activeSlide, onSelectSlide }
         fallback="#ffffff"
         onChange={(color) => set({ color: color ?? '#ffffff' })}
       />
+      <Toggle
+        label="Keep text inside Instagram's safe zone"
+        hint="Wraps lines before the like / share buttons and lifts long text above the caption"
+        checked={project.safeArea}
+        onChange={(safeArea) => update((p) => ({ ...p, safeArea }))}
+      />
 
       <div className="markup-help">
         <code>**bold**</code> <code>*italic*</code> <code>~light~</code> <code># headline</code>

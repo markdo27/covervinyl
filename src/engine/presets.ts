@@ -7,6 +7,7 @@
  * Pure data functions; reading and writing actual files is in lib/presetFiles.ts.
  */
 import { defaultProject, newSlide, uid } from './defaults';
+import { defaultFlip, type FlipCredits, type FlipProject } from './flip';
 import { CUSTOM_LUT_PREFIX, LOOKS, type Lut } from './luts';
 import { defaultReel, MIN_ITEM_DURATION, setAllDurations, type ReelOverlay, type ReelProject, type ReelTransition } from './reel';
 import {
@@ -28,7 +29,7 @@ export const PRESET_APP = 'CoverVinyl';
 export const PRESET_VERSION = 1;
 export const PRESET_EXTENSION = '.covervinyl.json';
 
-export type PresetMode = 'cover' | 'reel';
+export type PresetMode = 'cover' | 'reel' | 'flip';
 
 /** A file carried inside the preset. */
 export interface EmbeddedFile {
@@ -59,6 +60,7 @@ export interface CoverPresetSettings {
   text: TextStyle;
   cover: CoverStyle;
   placement: Record<Ratio, Placement>;
+  safeArea: boolean;
   video: Omit<VideoSettings, 'start'>;
   motion: MotionSettings;
   sections: TextSection[];
@@ -82,6 +84,17 @@ export interface ReelPresetSettings {
   export: ExportSettings;
 }
 
+export type FlipPartSettings = FlipCredits & { duration: number; volume: number };
+
+export interface FlipPresetSettings
+  extends Pick<
+    FlipProject,
+    'ratio' | 'first' | 'transition' | 'hook' | 'showLabels' | 'labels' | 'layout' | 'text' | 'accent' | 'footage' | 'outro' | 'post' | 'export'
+  > {
+  /** [new track, original]: credits, length and sound — not the clips or covers. */
+  parts: [FlipPartSettings, FlipPartSettings];
+}
+
 interface PresetHeader {
   app: typeof PRESET_APP;
   type: 'preset';
@@ -93,7 +106,8 @@ interface PresetHeader {
 
 export type CoverPreset = PresetHeader & { mode: 'cover'; settings: CoverPresetSettings };
 export type ReelPreset = PresetHeader & { mode: 'reel'; settings: ReelPresetSettings };
-export type Preset = CoverPreset | ReelPreset;
+export type FlipPreset = PresetHeader & { mode: 'flip'; settings: FlipPresetSettings };
+export type Preset = CoverPreset | ReelPreset | FlipPreset;
 
 /* ------------------------------------------------------------------ */
 /* Parts a preset can be applied in                                    */
@@ -101,7 +115,8 @@ export type Preset = CoverPreset | ReelPreset;
 
 export type CoverGroup = 'style' | 'look' | 'sections' | 'slides' | 'endCard';
 export type ReelGroup = 'overlay' | 'look' | 'timing';
-export type PresetGroup = CoverGroup | ReelGroup;
+export type FlipGroup = 'style' | 'look' | 'credits' | 'timing';
+export type PresetGroup = CoverGroup | ReelGroup | FlipGroup;
 
 export interface GroupInfo<G extends PresetGroup = PresetGroup> {
   key: G;
@@ -123,8 +138,15 @@ export const REEL_GROUPS: GroupInfo<ReelGroup>[] = [
   { key: 'timing', label: 'Timing & format', detail: 'Shot length, BPM, transition, zoom, music volume, ratio, export' },
 ];
 
+export const FLIP_GROUPS: GroupInfo<FlipGroup>[] = [
+  { key: 'style', label: 'Text style & layout', detail: 'Fonts, sizes, colours, tag colour, position, labels, transition, format' },
+  { key: 'look', label: 'Look & grain', detail: 'Colour look or LUT, grain, vignette' },
+  { key: 'credits', label: 'Credits & text', detail: 'Both tracks’ credits and story, the opening line, the closing card text, which plays first' },
+  { key: 'timing', label: 'Lengths & sound', detail: 'How long each clip, the opening line and the closing card last; clip volumes' },
+];
+
 export function presetGroups(mode: PresetMode): GroupInfo[] {
-  return mode === 'cover' ? COVER_GROUPS : REEL_GROUPS;
+  return mode === 'cover' ? COVER_GROUPS : mode === 'reel' ? REEL_GROUPS : FLIP_GROUPS;
 }
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +161,7 @@ export function coverPresetSettings(p: Project): CoverPresetSettings {
     text: p.text,
     cover: p.cover,
     placement: p.placement,
+    safeArea: p.safeArea,
     video: { zoom, panX, panY, dim, loop, audio },
     motion: p.motion,
     sections: p.sections,
@@ -171,6 +194,29 @@ export function reelPresetSettings(p: ReelProject): ReelPresetSettings {
     music: { volume: p.music.volume },
     post: p.post,
     export: p.export,
+  };
+}
+
+export function flipPresetSettings(p: FlipProject): FlipPresetSettings {
+  const part = (k: number): FlipPartSettings => {
+    const { tag, title, artist, released, album, genre, story, duration, volume } = p.parts[k];
+    return { tag, title, artist, released, album, genre, story, duration, volume };
+  };
+  return {
+    ratio: p.ratio,
+    first: p.first,
+    transition: p.transition,
+    hook: p.hook,
+    showLabels: p.showLabels,
+    labels: p.labels,
+    layout: p.layout,
+    text: p.text,
+    accent: p.accent,
+    footage: p.footage,
+    outro: p.outro,
+    post: p.post,
+    export: p.export,
+    parts: [part(0), part(1)],
   };
 }
 
@@ -223,6 +269,7 @@ export function applyCoverPreset(p: Project, s: CoverPresetSettings, groups: Rea
       text: { ...s.text, family: font(s.text.family), headlineFamily: font(s.text.headlineFamily) },
       cover: s.cover,
       placement: s.placement,
+      safeArea: s.safeArea,
       video: { ...s.video, start: p.video.start },
       motion: s.motion,
       export: s.export,
@@ -271,11 +318,59 @@ export function applyReelPreset(p: ReelProject, s: ReelPresetSettings, groups: R
   return next;
 }
 
+export interface FlipApplyContext extends ApplyContext {
+  hasFont: (key: string) => boolean;
+}
+
+export function applyFlipPreset(p: FlipProject, s: FlipPresetSettings, groups: ReadonlySet<PresetGroup>, ctx: FlipApplyContext): FlipProject {
+  let next: FlipProject = { ...p };
+  const parts = p.parts.map((part) => ({ ...part })) as FlipProject['parts'];
+  if (groups.has('style')) {
+    const font = (key: string) => (ctx.hasFont(key) ? key : 'inter');
+    next = {
+      ...next,
+      ratio: s.ratio,
+      transition: s.transition,
+      showLabels: s.showLabels,
+      labels: s.labels,
+      layout: s.layout,
+      text: { ...s.text, family: font(s.text.family), headlineFamily: font(s.text.headlineFamily) },
+      accent: s.accent,
+      footage: s.footage,
+      export: s.export,
+    };
+  }
+  if (groups.has('look')) next.post = resolvePost(s.post, ctx.lutKey);
+  if (groups.has('credits')) {
+    s.parts.forEach((ps, k) => {
+      const { tag, title, artist, released, album, genre, story } = ps;
+      parts[k] = { ...parts[k], tag, title, artist, released, album, genre, story };
+    });
+    next.first = s.first;
+    next.hook = { ...next.hook, enabled: s.hook.enabled, text: s.hook.text };
+    next.outro = { ...next.outro, text: s.outro.text };
+  }
+  if (groups.has('timing')) {
+    s.parts.forEach((ps, k) => {
+      parts[k] = { ...parts[k], duration: ps.duration, volume: ps.volume };
+    });
+    next.hook = { ...next.hook, duration: s.hook.duration };
+    next.outro = { ...next.outro, enabled: s.outro.enabled, duration: s.outro.duration };
+  }
+  next.parts = parts;
+  return next;
+}
+
 /* ------------------------------------------------------------------ */
 /* Building + reading preset files                                     */
 /* ------------------------------------------------------------------ */
 
-export function makePreset(name: string, body: { mode: 'cover'; settings: CoverPresetSettings } | { mode: 'reel'; settings: ReelPresetSettings }, files: PresetFiles): Preset {
+type PresetBody =
+  | { mode: 'cover'; settings: CoverPresetSettings }
+  | { mode: 'reel'; settings: ReelPresetSettings }
+  | { mode: 'flip'; settings: FlipPresetSettings };
+
+export function makePreset(name: string, body: PresetBody, files: PresetFiles): Preset {
   return {
     app: PRESET_APP,
     type: 'preset',
@@ -384,6 +479,26 @@ function cleanReel(raw: unknown): ReelPresetSettings {
   };
 }
 
+function cleanFlip(raw: unknown): FlipPresetSettings {
+  const def = flipPresetSettings(defaultFlip());
+  const s = conform(def, raw);
+  const rawParts = isObj(raw) && Array.isArray(raw.parts) ? raw.parts : [];
+  const parts = def.parts.map((d, k) => {
+    const part = conform(d, rawParts[k]);
+    return { ...part, duration: clamp(part.duration, 1, 90), volume: clamp(part.volume, 0, 1) };
+  }) as FlipPresetSettings['parts'];
+  return {
+    ...s,
+    ratio: cleanRatio(s.ratio, def.ratio),
+    first: oneOf(s.first, ['new', 'original'] as const, def.first),
+    transition: oneOf(s.transition, ['cut', 'fade', 'flash', 'push'] as const, def.transition),
+    layout: { ...s.layout, position: oneOf(s.layout.position, ['top', 'middle', 'bottom'] as const, def.layout.position) },
+    parts,
+    post: cleanPost(s.post, def.post),
+    export: cleanExport(s.export, def.export),
+  };
+}
+
 function cleanFile(v: unknown): EmbeddedFile | undefined {
   if (!isObj(v) || typeof v.name !== 'string' || typeof v.data !== 'string') return undefined;
   return { name: v.name, type: typeof v.type === 'string' ? v.type : '', data: v.data };
@@ -414,7 +529,7 @@ export function parsePreset(raw: unknown): Preset {
   if (typeof raw.version === 'number' && raw.version > PRESET_VERSION) {
     throw new Error('That preset was saved by a newer version of CoverVinyl — reload the page to update the app.');
   }
-  if (raw.mode !== 'cover' && raw.mode !== 'reel') throw new Error('That preset is for an editor this app doesn’t have.');
+  if (raw.mode !== 'cover' && raw.mode !== 'reel' && raw.mode !== 'flip') throw new Error('That preset is for an editor this app doesn’t have.');
   const header = {
     app: PRESET_APP as typeof PRESET_APP,
     type: 'preset' as const,
@@ -423,9 +538,9 @@ export function parsePreset(raw: unknown): Preset {
     savedAt: typeof raw.savedAt === 'string' ? raw.savedAt : '',
     files: cleanFiles(raw.files),
   };
-  return raw.mode === 'cover'
-    ? { ...header, mode: 'cover', settings: cleanCover(raw.settings) }
-    : { ...header, mode: 'reel', settings: cleanReel(raw.settings) };
+  if (raw.mode === 'cover') return { ...header, mode: 'cover', settings: cleanCover(raw.settings) };
+  if (raw.mode === 'reel') return { ...header, mode: 'reel', settings: cleanReel(raw.settings) };
+  return { ...header, mode: 'flip', settings: cleanFlip(raw.settings) };
 }
 
 /* ------------------------------------------------------------------ */
