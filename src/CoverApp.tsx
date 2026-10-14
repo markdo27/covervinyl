@@ -18,6 +18,7 @@ import { morphSection, PLACEHOLDER_CREDITS } from './engine/sections';
 import { clearLayoutCache } from './engine/textLayout';
 import { buildTimeline } from './engine/timeline';
 import type { ImageAsset, Placement, PostSettings, Project, VideoAsset } from './engine/types';
+import { enhanceClipAudio, useEnhancedAudio } from './lib/audioEnhance';
 import { loadImageFile, loadVideoFile } from './lib/media';
 import { embedFile, unembedFile } from './lib/presetFiles';
 
@@ -36,6 +37,7 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
   const update = useCallback((fn: (p: Project) => Project) => setProject(fn), []);
   const setPost = useCallback((patch: Partial<PostSettings>) => update((p) => ({ ...p, post: { ...p.post, ...patch } })), [update]);
   const looks = useLooks(luts, project.post, setPost, flash);
+  const enhanced = useEnhancedAudio(video && project.video.audio ? video.file : null, project.video.enhance);
   const timeline = useMemo(() => buildTimeline(project), [project]);
 
   const getImage = useCallback(
@@ -237,10 +239,15 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
         clearLayoutCache();
       },
       job: async (signal, onProgress) => {
+        let enhancedAudio: AudioBuffer | null = null;
+        if (video && project.video.audio && project.video.enhance.enabled) {
+          onProgress(0, 'Cleaning up the sound…');
+          enhancedAudio = (await enhanceClipAudio(video.file, project.video.enhance))?.buffer ?? null;
+        }
         // The encoder (Mediabunny + AAC WASM) is large, so it's only loaded when exporting.
         const { exportVideo } = await import('./export');
         return exportVideo(
-          { project, timeline, width, height, fps: project.export.fps, video, getImage, getLut, signal, onProgress },
+          { project, timeline, width, height, fps: project.export.fps, video, enhancedAudio, getImage, getLut, signal, onProgress },
           project.export.method,
         );
       },
@@ -277,6 +284,7 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
               if (video) URL.revokeObjectURL(video.url);
               setVideo(null);
             }}
+            enhanceStatus={enhanced.status}
           />
           <CoversStep
             project={project}
@@ -329,6 +337,7 @@ export function CoverApp({ active, mode, onModeChange, luts, pendingPreset, onPr
             onPlacementChange={onPlacementChange}
             onRatioChange={onRatioChange}
             active={active}
+            enhancedAudio={enhanced.buffer}
           />
         </div>
       </main>

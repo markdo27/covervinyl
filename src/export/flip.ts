@@ -16,6 +16,7 @@ import {
   chooseVideoCodec,
   decodeAudioSpan,
   encodeFrames,
+  spanFromBuffer,
   WebCodecsUnavailableError,
 } from './encoder';
 import { recordRealtime } from './recorder';
@@ -29,6 +30,8 @@ export interface FlipExportJob {
   fps: number;
   /** Footage of [new, original]. */
   footage: [MediaAsset | null, MediaAsset | null];
+  /** Each clip's cleaned-up sound when its audio enhance is on. */
+  enhanced: [AudioBuffer | null, AudioBuffer | null];
   getImage: (id: string | null) => DrawableImage | null;
   getLut: (key: string) => Lut | null;
   signal: AbortSignal;
@@ -104,6 +107,20 @@ async function exportFlipWebCodecs(job: FlipExportJob): Promise<ExportResult> {
     let audio: AudioBuffer | null = null;
     for (const [part, { input }] of tracks) {
       if (project.parts[part].volume <= 0) continue;
+      const win = audioWindow(timeline, part);
+      const enhanced = job.enhanced[part];
+      if (enhanced) {
+        const span = await spanFromBuffer(enhanced, {
+          from: project.parts[part].start,
+          loop: true,
+          total: Math.max(0.05, win.end - win.start),
+          fadeOut: 0,
+          sampleRate: SAMPLE_RATE,
+        });
+        audio ??= new AudioBuffer({ length: Math.ceil(total * SAMPLE_RATE), numberOfChannels: 2, sampleRate: SAMPLE_RATE });
+        mixInto(audio, span, win.start, (t) => flipAudioGain(project, timeline, part, t));
+        continue;
+      }
       const track = await input.getPrimaryAudioTrack();
       if (!track) continue;
       if (!(await track.canDecode())) {
@@ -111,7 +128,6 @@ async function exportFlipWebCodecs(job: FlipExportJob): Promise<ExportResult> {
         continue;
       }
       onProgress(0, 'Preparing audio…');
-      const win = audioWindow(timeline, part);
       const first = await track.getFirstTimestamp();
       const end = await track.computeDuration();
       const span = await decodeAudioSpan(track, {
@@ -211,7 +227,7 @@ function exportFlipRealtime(job: FlipExportJob): Promise<ExportResult> {
     signal,
     onProgress,
     notes,
-    setup: async ({ captureAudio }) => {
+    setup: async ({ captureAudio, captureBuffer }) => {
       const host = document.createElement('div');
       host.className = 'offscreen-media';
       document.body.appendChild(host);
@@ -219,12 +235,29 @@ function exportFlipRealtime(job: FlipExportJob): Promise<ExportResult> {
       media.setAssets(job.footage);
       onProgress(0, 'Loading clips…');
       await media.ready();
+      // Enhanced clips are pre-mixed into one soundtrack; the others are captured live.
+      let mix: AudioBuffer | null = null;
       for (const part of [0, 1]) {
         const el = media.element(part);
-        if (el && project.parts[part].volume > 0 && !captureAudio(el)) {
+        if (!el || project.parts[part].volume <= 0) continue;
+        const enhanced = job.enhanced[part];
+        if (enhanced) {
+          media.setAudio(part, 'mute');
+          const win = audioWindow(timeline, part);
+          const span = await spanFromBuffer(enhanced, {
+            from: project.parts[part].start,
+            loop: true,
+            total: Math.max(0.05, win.end - win.start),
+            fadeOut: 0,
+            sampleRate: SAMPLE_RATE,
+          });
+          mix ??= new AudioBuffer({ length: Math.ceil(timeline.total * SAMPLE_RATE), numberOfChannels: 2, sampleRate: SAMPLE_RATE });
+          mixInto(mix, span, win.start, (t) => flipAudioGain(project, timeline, part, t));
+        } else if (!captureAudio(el)) {
           notes.push(`The sound of "${job.footage[part]?.name}" couldn't be captured, so it's silent.`);
         }
       }
+      if (mix && !captureBuffer(mix)) notes.push("The clips' cleaned-up sound couldn't be captured, so it's silent.");
       media.sync(project, timeline, 0, false, true);
       return {
         draw: (compositor, t) =>

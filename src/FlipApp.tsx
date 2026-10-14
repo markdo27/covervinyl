@@ -20,6 +20,7 @@ import type { MediaAsset } from './engine/reel';
 import type { DrawableImage } from './engine/renderer';
 import { clearLayoutCache } from './engine/textLayout';
 import type { ImageAsset, PostSettings, TextStyle } from './engine/types';
+import { enhanceClipAudio, useEnhancedAudio } from './lib/audioEnhance';
 import { loadImageFile, loadReelMedia } from './lib/media';
 import { embedFile, unembedFile } from './lib/presetFiles';
 
@@ -57,6 +58,18 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
     () => [(newId && media.get(newId)) || null, (originalId && media.get(originalId)) || null],
     [media, newId, originalId],
   );
+  // Each clip's cleaned-up sound (when its audio enhance is on).
+  const soundFile = (part: number) => {
+    const asset = footage[part];
+    return asset?.kind === 'video' && project.parts[part].volume > 0 ? asset.file : null;
+  };
+  const enhancedNew = useEnhancedAudio(soundFile(0), project.parts[0].enhance);
+  const enhancedOriginal = useEnhancedAudio(soundFile(1), project.parts[1].enhance);
+  const enhancedBuffers = useMemo<[AudioBuffer | null, AudioBuffer | null]>(
+    () => [enhancedNew.buffer, enhancedOriginal.buffer],
+    [enhancedNew.buffer, enhancedOriginal.buffer],
+  );
+
   const getImage = useCallback(
     (id: string | null): DrawableImage | null => {
       const asset = id ? covers.get(id) : undefined;
@@ -230,9 +243,16 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
         clearLayoutCache();
       },
       job: async (signal, onProgress) => {
+        const enhanced: [AudioBuffer | null, AudioBuffer | null] = [null, null];
+        for (const part of [0, 1]) {
+          const file = soundFile(part);
+          if (!file || !project.parts[part].enhance.enabled) continue;
+          onProgress(0, 'Cleaning up the sound…');
+          enhanced[part] = (await enhanceClipAudio(file, project.parts[part].enhance))?.buffer ?? null;
+        }
         const { exportFlip } = await import('./export/flip');
         return exportFlip(
-          { project, timeline, width, height, fps: project.export.fps, footage, getImage, getLut: luts.get, signal, onProgress },
+          { project, timeline, width, height, fps: project.export.fps, footage, enhanced, getImage, getLut: luts.get, signal, onProgress },
           project.export.method,
         );
       },
@@ -261,6 +281,7 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
             onFootageFile={onFootageFile}
             onRemoveFootage={onRemoveFootage}
             onSelectPart={selectPart}
+            enhanceStatus={[enhancedNew.status, enhancedOriginal.status]}
           />
           <FlipCreditsStep
             project={project}
@@ -304,6 +325,7 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
             project={project}
             timeline={timeline}
             footage={footage}
+            enhanced={enhancedBuffers}
             getImage={getImage}
             getLut={luts.get}
             controllerRef={previewRef}

@@ -1,3 +1,4 @@
+import { DEFAULT_ENHANCE } from './audioEnhance';
 import type { Project, Slide } from './types';
 
 let counter = 0;
@@ -85,6 +86,7 @@ export function defaultProject(): Project {
       dim: 0.12,
       loop: true,
       audio: true,
+      enhance: { ...DEFAULT_ENHANCE },
     },
     motion: {
       transition: 0.6,

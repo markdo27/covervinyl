@@ -1,3 +1,5 @@
+import type { AudioEnhance } from './audioEnhance';
+
 export type Ratio = '9:16' | '3:4';
 
 export const RATIOS: Record<Ratio, { w: number; h: number; label: string }> = {
@@ -99,6 +101,8 @@ export interface VideoSettings {
   loop: boolean;
   /** Include the clip's audio in preview + export. */
   audio: boolean;
+  /** Clean-up for phone-mic recordings (noise, rumble, clarity, loudness). */
+  enhance: AudioEnhance;
 }
 
 export interface MotionSettings {

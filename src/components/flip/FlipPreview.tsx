@@ -14,6 +14,8 @@ interface Props {
   project: FlipProject;
   timeline: FlipTimeline;
   footage: [MediaAsset | null, MediaAsset | null];
+  /** Cleaned-up sound per clip, played instead of the clip's own when set. */
+  enhanced: [AudioBuffer | null, AudioBuffer | null];
   getImage: (id: string | null) => DrawableImage | null;
   getLut: (key: string) => Lut | null;
   controllerRef: RefObject<PlayerController | null>;
@@ -46,6 +48,13 @@ export function FlipPreview(props: Props) {
     mediaRef.current?.setAssets([footageNew, footageOriginal]);
     controllerRef.current?.resync();
   }, [footageNew, footageOriginal, controllerRef]);
+
+  const [enhancedNew, enhancedOriginal] = props.enhanced;
+  useEffect(() => {
+    mediaRef.current?.setAudio(0, enhancedNew);
+    mediaRef.current?.setAudio(1, enhancedOriginal);
+    controllerRef.current?.resync();
+  }, [enhancedNew, enhancedOriginal, controllerRef]);
 
   useEffect(() => {
     if (!props.active) mediaRef.current?.pauseAll();

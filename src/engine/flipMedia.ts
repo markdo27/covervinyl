@@ -3,6 +3,7 @@
  * with a playhead. Used by the preview and the real-time exporter.
  */
 import { flipAudioGain, flipClipTime, flipLayersAt, audioWindow, type FlipProject, type FlipTimeline } from './flip';
+import { BufferPlayer } from './bufferPlayer';
 import type { MediaAsset } from './reel';
 import type { DrawableImage } from './renderer';
 
@@ -17,6 +18,9 @@ export class FlipMedia {
   /** One element per part (even if both parts use the same file, they play at different times). */
   private slots: (Slot | null)[] = [null, null];
   private assets: (MediaAsset | null)[] = [null, null];
+  /** Per part: a cleaned-up soundtrack to play instead of the clip's own sound, or 'mute'. */
+  private audio: (AudioBuffer | 'mute' | null)[] = [null, null];
+  private players: (BufferPlayer | null)[] = [null, null];
 
   /** Called whenever a clip has a new frame to show while paused (after a seek / load). */
   onFrame: () => void = () => undefined;
@@ -45,6 +49,21 @@ export class FlipMedia {
     });
   }
 
+  /**
+   * Plays `buffer` (the clip's enhanced sound, positioned in clip time) instead
+   * of the clip's own sound; 'mute' silences the clip; null restores it.
+   */
+  setAudio(part: number, audio: AudioBuffer | 'mute' | null): void {
+    this.audio[part] = audio;
+    if (audio instanceof AudioBuffer) {
+      this.players[part] ??= new BufferPlayer();
+      this.players[part].setBuffer(audio);
+    } else {
+      this.players[part]?.dispose();
+      this.players[part] = null;
+    }
+  }
+
   element(part: number): HTMLVideoElement | null {
     return this.slots[part]?.el ?? null;
   }
@@ -71,16 +90,27 @@ export class FlipMedia {
       const el = slot.el;
       const win = audioWindow(tl, part);
       const live = visible.has(part) || (t >= win.start && t < win.end);
+      const override = this.audio[part];
+      const player = this.players[part];
       if (live) {
         const expected = flipClipTime(p.parts[part], asset.duration, t - tl.playStart[part]);
         if ((force || Math.abs(el.currentTime - expected) > DRIFT) && !el.seeking) el.currentTime = expected;
         const gain = flipAudioGain(p, tl, part, t);
-        el.muted = gain <= 0;
-        el.volume = Math.min(1, Math.max(0, gain));
+        if (override) {
+          el.muted = true;
+          if (player && override instanceof AudioBuffer) {
+            const loop = { start: p.parts[part].start, end: Math.min(asset.duration, override.duration) };
+            player.sync(expected, playing, force, gain, loop);
+          }
+        } else {
+          el.muted = gain <= 0;
+          el.volume = Math.min(1, Math.max(0, gain));
+        }
         if (playing && el.paused) void el.play().catch(() => undefined);
         if (!playing && !el.paused) el.pause();
         return;
       }
+      player?.stop();
       if (!el.paused) el.pause();
       // Park the upcoming clip on its first frame so the cut is instant.
       if (t < win.start) {
@@ -102,11 +132,14 @@ export class FlipMedia {
 
   pauseAll(): void {
     for (const slot of this.slots) slot?.el.pause();
+    for (const player of this.players) player?.stop();
   }
 
   dispose(): void {
     for (const slot of this.slots) if (slot) release(slot.el);
     this.slots = [null, null];
+    for (const player of this.players) player?.dispose();
+    this.players = [null, null];
   }
 }
 

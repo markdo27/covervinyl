@@ -16,6 +16,7 @@ import {
 import { Compositor } from '../engine/compositor';
 import type { DrawableImage } from '../engine/renderer';
 import { sourceTime } from '../engine/timeline';
+import { spanFromBuffer } from './encoder';
 import { ExportAbortedError, type ExportJob, type ExportResult } from './types';
 
 // Explicit H.264 MP4 first (what Instagram wants). A bare 'video/mp4' comes last
@@ -107,9 +108,13 @@ export interface RealtimeOptions {
   notes: string[];
   /**
    * Loads media and returns the session. `captureAudio` routes a media
-   * element's sound into the recording (returns false if that failed).
+   * element's sound into the recording; `captureBuffer` plays a ready-made
+   * soundtrack into it from the first frame (both return false on failure).
    */
-  setup: (helpers: { captureAudio: (el: HTMLMediaElement) => boolean }) => Promise<RealtimeSession>;
+  setup: (helpers: {
+    captureAudio: (el: HTMLMediaElement) => boolean;
+    captureBuffer: (buffer: AudioBuffer) => boolean;
+  }) => Promise<RealtimeSession>;
 }
 
 /** Plays a scene in real time on an offscreen canvas and records it. */
@@ -130,14 +135,29 @@ export async function recordRealtime(opts: RealtimeOptions): Promise<ExportResul
   let audioCtx: AudioContext | null = null;
   let destination: MediaStreamAudioDestinationNode | null = null;
   let hasAudio = false;
+  const soundtracks: AudioBuffer[] = [];
+  const ensureDestination = (): [AudioContext, MediaStreamAudioDestinationNode] => {
+    audioCtx ??= new AudioContext();
+    if (!destination) {
+      destination = audioCtx.createMediaStreamDestination();
+      for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
+    }
+    return [audioCtx, destination];
+  };
+  const captureBuffer = (buffer: AudioBuffer): boolean => {
+    try {
+      ensureDestination();
+      soundtracks.push(buffer);
+      hasAudio = true;
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const captureAudio = (el: HTMLMediaElement): boolean => {
     try {
-      audioCtx ??= new AudioContext();
-      if (!destination) {
-        destination = audioCtx.createMediaStreamDestination();
-        for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
-      }
-      audioCtx.createMediaElementSource(el).connect(destination);
+      const [ac, dest] = ensureDestination();
+      ac.createMediaElementSource(el).connect(dest);
       hasAudio = true;
       return true;
     } catch {
@@ -147,7 +167,7 @@ export async function recordRealtime(opts: RealtimeOptions): Promise<ExportResul
 
   let session: RealtimeSession | null = null;
   try {
-    session = await opts.setup({ captureAudio });
+    session = await opts.setup({ captureAudio, captureBuffer });
     const s = session;
 
     const recorder = new MediaRecorder(stream, {
@@ -164,6 +184,14 @@ export async function recordRealtime(opts: RealtimeOptions): Promise<ExportResul
     await (audioCtx as AudioContext | null)?.resume();
     await s.start?.();
     recorder.start(250);
+    if (audioCtx && destination) {
+      for (const buffer of soundtracks) {
+        const node = (audioCtx as AudioContext).createBufferSource();
+        node.buffer = buffer;
+        node.connect(destination);
+        node.start();
+      }
+    }
     const t0 = performance.now();
 
     await new Promise<void>((resolve, reject) => {
@@ -239,16 +267,21 @@ export function exportWithRecorder(job: ExportJob): Promise<ExportResult> {
     signal,
     onProgress,
     notes,
-    setup: async ({ captureAudio }) => {
+    setup: async ({ captureAudio, captureBuffer }) => {
       let video: HTMLVideoElement | null = null;
       if (job.video) {
         video = document.createElement('video');
         video.src = job.video.url;
         video.playsInline = true;
         video.preload = 'auto';
-        video.muted = !project.video.audio;
+        const enhanced = project.video.audio ? job.enhancedAudio : null;
+        video.muted = !project.video.audio || !!enhanced;
         await once(video, 'loadeddata', signal);
-        if (project.video.audio && !captureAudio(video)) {
+        if (enhanced) {
+          // The cleaned-up sound plays from a buffer; the clip stays muted.
+          const span = await spanFromBuffer(enhanced, { from: project.video.start, loop: project.video.loop, total: timeline.total });
+          if (!captureBuffer(span)) notes.push("The clip's audio couldn't be captured, so the export is silent.");
+        } else if (project.video.audio && !captureAudio(video)) {
           notes.push("The clip's audio couldn't be captured, so the export is silent.");
           video.muted = true;
         }

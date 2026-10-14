@@ -3,6 +3,7 @@
  * samples — each with its own cover and credits, then an optional end card
  * with the user's logo. Model, defaults and timing — no DOM.
  */
+import { DEFAULT_ENHANCE, type AudioEnhance } from './audioEnhance';
 import { easeInOutCubic } from './easing';
 import { stripMarkup } from './markup';
 import type { EndCard, ExportSettings, PostSettings, Ratio, TextStyle } from './types';
@@ -34,6 +35,8 @@ export interface FlipPart extends FlipCredits {
   duration: number;
   /** Clip sound level, 0 = muted. */
   volume: number;
+  /** Clean-up for phone-mic recordings (noise, rumble, clarity, loudness). */
+  enhance: AudioEnhance;
 }
 
 export interface FlipLabels {
@@ -98,6 +101,7 @@ export function newFlipPart(partial: Partial<FlipPart> = {}): FlipPart {
     start: 0,
     duration: 8,
     volume: 1,
+    enhance: { ...DEFAULT_ENHANCE },
     tag: '',
     title: '',
     artist: '',

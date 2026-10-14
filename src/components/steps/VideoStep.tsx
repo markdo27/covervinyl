@@ -1,6 +1,8 @@
 import { formatTime } from '../../engine/timeline';
 import type { Project, VideoAsset } from '../../engine/types';
+import type { EnhanceStatus } from '../../lib/audioEnhance';
 import { formatBytes } from '../../lib/media';
+import { AudioEnhanceFields } from '../AudioEnhanceFields';
 import { FileDrop, Section, Slider, Toggle } from '../ui';
 
 interface Props {
@@ -10,9 +12,10 @@ interface Props {
   onVideoFile: (file: File) => void;
   onRemoveVideo: () => void;
   editLength: number;
+  enhanceStatus: EnhanceStatus;
 }
 
-export function VideoStep({ project, update, video, onVideoFile, onRemoveVideo, editLength }: Props) {
+export function VideoStep({ project, update, video, onVideoFile, onRemoveVideo, editLength, enhanceStatus }: Props) {
   const v = project.video;
   const set = (patch: Partial<Project['video']>) => update((p) => ({ ...p, video: { ...p.video, ...patch } }));
   const usable = video ? Math.max(0, video.duration - v.start) : 0;
@@ -77,6 +80,9 @@ export function VideoStep({ project, update, video, onVideoFile, onRemoveVideo, 
         <Toggle label="Include the clip's audio" checked={v.audio} onChange={(audio) => set({ audio })} />
         <Toggle label="Loop if the clip is shorter" checked={v.loop} onChange={(loop) => set({ loop })} />
       </div>
+      {video && v.audio && (
+        <AudioEnhanceFields value={v.enhance} onChange={(patch) => set({ enhance: { ...v.enhance, ...patch } })} status={enhanceStatus} />
+      )}
     </Section>
   );
 }
