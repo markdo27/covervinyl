@@ -147,6 +147,7 @@ export interface Project {
 export interface ImageAsset {
   id: string;
   name: string;
+  file: File;
   url: string;
   image: HTMLImageElement;
   width: number;

@@ -30,6 +30,8 @@ export interface UserFontFace {
   weight: string;
   style: 'normal' | 'italic';
   fileName: string;
+  /** The uploaded file, kept so presets can carry it. */
+  file: File;
   face: FontFace;
 }
 
@@ -247,7 +249,7 @@ export async function loadUserFont(file: File): Promise<UserFontFace> {
   await face.load();
   document.fonts.add(face);
   faceCounter += 1;
-  return { id: `font-${faceCounter}`, family, weight, style, fileName: file.name, face };
+  return { id: `font-${faceCounter}`, family, weight, style, fileName: file.name, file, face };
 }
 
 export function unloadUserFont(font: UserFontFace): void {

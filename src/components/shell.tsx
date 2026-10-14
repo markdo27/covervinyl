@@ -1,8 +1,10 @@
 /** Pieces shared by both editor modes: top bar, toasts and the export runner. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Lut } from '../engine/luts';
+import type { Preset } from '../engine/presets';
 import type { Ratio } from '../engine/types';
 import type { ExportResult } from '../export/types';
+import { readPresetFile } from '../lib/presetFiles';
 import { ExportDialog, type ExportStatus } from './ExportDialog';
 
 export type Mode = 'cover' | 'reel';
@@ -17,6 +19,8 @@ export interface LutLibrary {
   custom: Lut[];
   get: (key: string) => Lut | null;
   addFile: (file: File) => Promise<Lut>;
+  /** Registers a LUT carried by a preset, reusing an identical one already loaded. */
+  adopt: (lut: Omit<Lut, 'key'>) => Lut;
   remove: (key: string) => void;
 }
 
@@ -25,9 +29,41 @@ export interface ModeProps {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
   luts: LutLibrary;
+  /** A preset picked in the top bar, waiting to be applied by the editor it belongs to. */
+  pendingPreset: Preset | null;
+  /** Hands a loaded preset to its editor (switching modes if needed), or clears it. */
+  onPreset: (preset: Preset | null) => void;
 }
 
-export function TopBar(props: { mode: Mode; onModeChange: (m: Mode) => void; onExport: () => void; exporting: boolean }) {
+const SaveIcon = () => (
+  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+    <path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14v2.5h12V14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const LoadIcon = () => (
+  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+    <path d="M10 13V4m0 0L6.5 7.5M10 4l3.5 3.5M4 14v2.5h12V14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export function TopBar(props: {
+  mode: Mode;
+  onModeChange: (m: Mode) => void;
+  onExport: () => void;
+  exporting: boolean;
+  onSavePreset: () => void;
+  onPreset: (preset: Preset) => void;
+  flash: (kind: 'error' | 'info', text: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const onFile = async (file: File) => {
+    try {
+      props.onPreset(await readPresetFile(file));
+    } catch (err) {
+      props.flash('error', err instanceof Error ? err.message : String(err));
+    }
+  };
   return (
     <header className="topbar">
       <div className="brand">
@@ -54,9 +90,42 @@ export function TopBar(props: { mode: Mode; onModeChange: (m: Mode) => void; onE
           </button>
         ))}
       </nav>
-      <button type="button" className="btn-primary" onClick={props.onExport} disabled={props.exporting}>
-        Export
-      </button>
+      <div className="topbar-actions">
+        <button
+          type="button"
+          className="btn-ghost topbar-btn"
+          onClick={props.onSavePreset}
+          aria-label="Save preset"
+          title="Save your settings as a preset (.json)"
+        >
+          <SaveIcon />
+          <span>Save preset</span>
+        </button>
+        <button
+          type="button"
+          className="btn-ghost topbar-btn"
+          onClick={() => fileRef.current?.click()}
+          aria-label="Load preset"
+          title="Load a preset (.json)"
+        >
+          <LoadIcon />
+          <span>Load preset</span>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          hidden
+          accept=".json,application/json"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void onFile(file);
+          }}
+        />
+        <button type="button" className="btn-primary" onClick={props.onExport} disabled={props.exporting}>
+          Export
+        </button>
+      </div>
     </header>
   );
 }
