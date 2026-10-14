@@ -1,6 +1,7 @@
 import type { Lut } from './luts';
 import { PostProcessor, postActive } from './post';
-import { drawSafeZones, renderFrame, type RenderInput } from './renderer';
+import { renderFrame, type RenderInput } from './renderer';
+import { drawSafeZones } from './safeZone';
 import type { PostSettings, Ratio } from './types';
 
 export interface CompositeInput extends RenderInput {

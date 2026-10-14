@@ -1,10 +1,11 @@
 import { BUILT_IN_FONTS, FONT_ACCEPT, fontStack, userFontKey, type UserFontFace } from '../../engine/fonts';
-import type { Project } from '../../engine/types';
+import type { TextStyle } from '../../engine/types';
 import { FileDrop, Section } from '../ui';
 
 interface Props {
-  project: Project;
-  update: (fn: (p: Project) => Project) => void;
+  step: number;
+  text: TextStyle;
+  setText: (patch: Partial<TextStyle>) => void;
   fonts: UserFontFace[];
   onFontFiles: (files: File[]) => void;
   onRemoveFamily: (family: string) => void;
@@ -17,9 +18,7 @@ function describeFace(f: UserFontFace): string {
   return `${w}${f.style === 'italic' ? ' italic' : ''}`;
 }
 
-export function FontsStep({ project, update, fonts, onFontFiles, onRemoveFamily }: Props) {
-  const t = project.text;
-  const set = (patch: Partial<Project['text']>) => update((p) => ({ ...p, text: { ...p.text, ...patch } }));
+export function FontsStep({ step, text: t, setText: set, fonts, onFontFiles, onRemoveFamily }: Props) {
   const families = [...new Set(fonts.map((f) => f.family))];
   const options = [
     ...families.map((family) => ({ key: userFontKey(family), label: `${family} (uploaded)` })),
@@ -28,7 +27,7 @@ export function FontsStep({ project, update, fonts, onFontFiles, onRemoveFamily 
   const usesUserFont = t.family.startsWith('user:') || t.headlineFamily.startsWith('user:');
 
   return (
-    <Section step={4} title="Fonts" subtitle="Upload your own typeface" done={usesUserFont}>
+    <Section step={step} title="Fonts" subtitle="Upload your own typeface" done={usesUserFont}>
       <FileDrop
         accept={FONT_ACCEPT}
         multiple

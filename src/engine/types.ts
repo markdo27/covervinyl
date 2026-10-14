@@ -137,6 +137,8 @@ export interface Project {
   text: TextStyle;
   cover: CoverStyle;
   placement: Record<Ratio, Placement>;
+  /** Keep the cover + text clear of Instagram's UI (wrap before the side buttons, lift above the caption). */
+  safeArea: boolean;
   video: VideoSettings;
   motion: MotionSettings;
   endCard: EndCard;

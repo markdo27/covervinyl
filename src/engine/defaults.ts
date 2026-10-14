@@ -73,9 +73,10 @@ export function defaultProject(): Project {
       shadow: true,
     },
     placement: {
-      '9:16': { x: 0.14, y: 0.3 },
+      '9:16': { x: 0.14, y: 0.25 },
       '3:4': { x: 0.14, y: 0.17 },
     },
+    safeArea: true,
     video: {
       start: 0,
       zoom: 1,

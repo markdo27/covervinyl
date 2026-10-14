@@ -7,11 +7,12 @@ import type { ExportResult } from '../export/types';
 import { readPresetFile } from '../lib/presetFiles';
 import { ExportDialog, type ExportStatus } from './ExportDialog';
 
-export type Mode = 'cover' | 'reel';
+export type Mode = 'cover' | 'reel' | 'flip';
 
-export const MODES: { value: Mode; label: string; hint: string }[] = [
-  { value: 'cover', label: 'Cover Crate', hint: 'Album covers + credits over your clip' },
-  { value: 'reel', label: 'Photo Reel', hint: 'Beat-cut photos & clips with an animation on top' },
+export const MODES: { value: Mode; label: string; short: string; hint: string }[] = [
+  { value: 'cover', label: 'Cover Crate', short: 'Covers', hint: 'Album covers + credits over your clip' },
+  { value: 'reel', label: 'Photo Reel', short: 'Reel', hint: 'Beat-cut photos & clips with an animation on top' },
+  { value: 'flip', label: 'Sample Flip', short: 'Flip', hint: 'A new track and the original it samples, back to back' },
 ];
 
 /** Uploaded .cube LUTs, shared between modes. */
@@ -84,9 +85,13 @@ export function TopBar(props: {
             aria-selected={props.mode === m.value}
             className={props.mode === m.value ? 'is-active' : ''}
             title={m.hint}
+            aria-label={m.label}
             onClick={() => props.onModeChange(m.value)}
           >
-            {m.label}
+            <span className="mode-label">{m.label}</span>
+            <span className="mode-short" aria-hidden>
+              {m.short}
+            </span>
           </button>
         ))}
       </nav>

@@ -2,7 +2,9 @@ import { clamp01, easeInCubic, easeInOutCubic, easeOutCubic, easeOutExpo, lerp }
 import { fontStack } from './fonts';
 import { planMorph, type MorphPlan } from './morph';
 import { drawPlaceholderBackground, placeholderCover } from './placeholder';
+import { drawSafeZones, SAFE_AREAS, safeLift } from './safeZone';
 import { morphSection, sectionMarkup, stackSections } from './sections';
+import { drawTextLine, roundRect, setTextShadow, smearCopies } from './textDraw';
 import {
   cachedGlyphs,
   cachedLayout,
@@ -12,7 +14,7 @@ import {
   type TextMetricsStyle,
 } from './textLayout';
 import { slideIndexAt, type Timeline } from './timeline';
-import type { Project, Ratio, TextSection } from './types';
+import type { Project, TextSection } from './types';
 
 export interface DrawableImage {
   source: CanvasImageSource;
@@ -66,6 +68,8 @@ export function renderFrame(ctx: CanvasRenderingContext2D, W: number, H: number,
     tracking: p.text.tracking,
     weights: p.text.weights,
   };
+  const safe = p.safeArea ? SAFE_AREAS[p.ratio] : null;
+  const rightEdge = safe ? safe.right * W : W * 0.95;
   const f: Frame = {
     ctx,
     W,
@@ -77,11 +81,17 @@ export function renderFrame(ctx: CanvasRenderingContext2D, W: number, H: number,
     baseY: place.y * H,
     coverSize,
     textTop: place.y * H + coverSize + 0.035 * W,
-    maxTextWidth: Math.max(W * 0.2, W - place.x * W - 0.05 * W),
+    maxTextWidth: Math.max(W * 0.2, rightEdge - place.x * W),
     style,
     bodyLine: bodyPx * p.text.lineHeight,
     morphId: morphSection(p.sections)?.id,
   };
+  if (safe) {
+    // Lift the cover + text so the longest slide's text ends above Instagram's caption area.
+    const lift = safeLift(f.baseY, f.textTop + tallestText(f), H, safe);
+    f.baseY += lift;
+    f.textTop += lift;
+  }
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -215,20 +225,6 @@ function drawCover(f: Frame, img: DrawableImage, x: number, y: number, size: num
   ctx.restore();
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  if (r <= 0) {
-    ctx.rect(x, y, w, h);
-    return;
-  }
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
 
 /* ------------------------------------------------------------------ */
 /* Slide text                                                          */
@@ -272,6 +268,18 @@ function sectionTops(f: Frame, i: number, t: number): number[] {
     sections.map((s) => s.gap),
     f.bodyLine,
   );
+}
+
+/** Height of the tallest slide's finished text, shared sections included. */
+function tallestText(f: Frame): number {
+  let tallest = 0;
+  f.p.slides.forEach((_, i) => {
+    const tops = sectionTops(f, i, Infinity);
+    f.p.sections.forEach((section, k) => {
+      tallest = Math.max(tallest, tops[k] + sectionHeight(f, section, i, Infinity));
+    });
+  });
+  return tallest;
 }
 
 /** Top of section k at time t, gliding from its old spot during a slide change. */
@@ -407,21 +415,7 @@ function drawMorph(
 }
 
 function setTextStyle(f: Frame): void {
-  const { ctx, p, W } = f;
-  if (p.text.shadow) {
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.shadowBlur = W * 0.012;
-    ctx.shadowOffsetY = W * 0.0015;
-    ctx.shadowOffsetX = 0;
-  } else {
-    ctx.shadowColor = 'transparent';
-  }
-}
-
-/** Number of copies + per-copy alpha for a cheap directional motion blur. */
-function smearCopies(smear: number, alpha: number, W: number): { n: number; a: number } {
-  const n = smear > W * 0.002 ? Math.min(8, 2 + Math.ceil(smear / (W * 0.006))) : 1;
-  return { n, a: n === 1 ? alpha : 1 - Math.pow(1 - Math.min(alpha, 0.999), 1 / n) };
+  setTextShadow(f.ctx, f.W, f.p.text.shadow);
 }
 
 function drawLine(
@@ -434,23 +428,7 @@ function drawLine(
   smearY: number,
   color = f.p.text.color,
 ) {
-  if (alpha <= 0.003 || !line.runs.length) return;
-  const { ctx, W } = f;
-  setTextStyle(f);
-  const cy = top + line.height / 2;
-  const { n, a } = smearCopies(Math.max(Math.abs(smearX), Math.abs(smearY)), alpha, W);
-  ctx.globalAlpha = a;
-  for (let c = 0; c < n; c++) {
-    const k = n === 1 ? 0 : c / (n - 1) - 0.5;
-    for (const run of line.runs) {
-      ctx.font = run.font;
-      ctx.fillStyle = run.color ?? color;
-      if ('letterSpacing' in ctx) ctx.letterSpacing = run.letterSpacing;
-      ctx.fillText(run.text, x + run.x + k * smearX, cy + k * smearY);
-    }
-  }
-  ctx.globalAlpha = 1;
-  ctx.shadowColor = 'transparent';
+  drawTextLine(f.ctx, line, x, top, { alpha, color, shadow: f.p.text.shadow, smearX, smearY });
 }
 
 function drawGlyph(
@@ -540,27 +518,4 @@ function tintedImage(img: DrawableImage, color: string): HTMLCanvasElement {
     byColor.set(color, canvas);
   }
   return canvas;
-}
-
-/* ------------------------------------------------------------------ */
-/* Safe zones                                                          */
-/* ------------------------------------------------------------------ */
-
-export function drawSafeZones(ctx: CanvasRenderingContext2D, W: number, H: number, ratio: Ratio): void {
-  if (ratio !== '9:16') return;
-  ctx.save();
-  ctx.fillStyle = 'rgba(255, 64, 64, 0.16)';
-  ctx.strokeStyle = 'rgba(255, 120, 120, 0.6)';
-  ctx.lineWidth = Math.max(1, W * 0.002);
-  ctx.setLineDash([W * 0.012, W * 0.01]);
-  const zones: [number, number, number, number][] = [
-    [0, 0, W, H * 0.11],
-    [0, H * 0.79, W, H * 0.21],
-    [W * 0.85, H * 0.5, W * 0.15, H * 0.29],
-  ];
-  for (const [x, y, w, h] of zones) {
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeRect(x, y, w, h);
-  }
-  ctx.restore();
 }

@@ -95,11 +95,23 @@ export function canvasSinkFor(track: InputVideoTrack, opts: { alpha?: boolean } 
 /**
  * Decodes `total` seconds of audio from `track`, starting at timestamp
  * `from` and (optionally) looping back to `from` whenever `end` is reached.
- * Adds a short fade at loop seams and a half-second fade-out at the end.
+ * Adds a short fade at loop seams and (by default) a half-second fade-out at
+ * the end. Unusual sample rates — or any rate other than `sampleRate`, when
+ * given — are resampled.
  */
 export async function decodeAudioSpan(
   track: InputAudioTrack,
-  opts: { from: number; end: number; loop: boolean; total: number; volume?: number; signal: AbortSignal },
+  opts: {
+    from: number;
+    end: number;
+    loop: boolean;
+    total: number;
+    volume?: number;
+    signal: AbortSignal;
+    /** Seconds of fade-out at the end (default 0.5). */
+    fadeOut?: number;
+    sampleRate?: number;
+  },
 ): Promise<AudioBuffer> {
   const { total, signal } = opts;
   const sampleRate = track.sampleRate;
@@ -137,15 +149,16 @@ export async function decodeAudioSpan(
     outPos += segLength;
   }
 
-  // Fade out over the last half second so the video doesn't end on a cut.
-  const fadeFrames = Math.min(length, Math.round(sampleRate * 0.5));
+  // Fade out at the end so the video doesn't end on a cut.
+  const fadeFrames = Math.min(length, Math.round(sampleRate * (opts.fadeOut ?? 0.5)));
   for (let c = 0; c < channels; c++) {
     for (let i = 0; i < fadeFrames; i++) outData[c][length - fadeFrames + i] *= 1 - i / fadeFrames;
   }
 
-  if (sampleRate === 44100 || sampleRate === 48000) return out;
-  // AAC encoders are picky about unusual sample rates; resample to 48 kHz.
-  const offline = new OfflineAudioContext(channels, Math.ceil(total * 48000), 48000);
+  const rate = opts.sampleRate ?? (sampleRate === 44100 || sampleRate === 48000 ? sampleRate : 48000);
+  if (rate === sampleRate) return out;
+  // AAC encoders are picky about unusual sample rates; resample.
+  const offline = new OfflineAudioContext(channels, Math.ceil(total * rate), rate);
   const node = offline.createBufferSource();
   node.buffer = out;
   node.connect(offline.destination);
