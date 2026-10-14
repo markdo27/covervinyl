@@ -166,6 +166,48 @@ export async function decodeAudioSpan(
   return offline.startRendering();
 }
 
+/**
+ * `total` seconds of an already-decoded soundtrack from position `from`,
+ * looping back to `from` at the end when asked, with the same seam fades,
+ * end fade-out and resampling rules as decodeAudioSpan.
+ */
+export async function spanFromBuffer(
+  source: AudioBuffer,
+  opts: { from: number; loop: boolean; total: number; volume?: number; fadeOut?: number; sampleRate?: number },
+): Promise<AudioBuffer> {
+  const sampleRate = source.sampleRate;
+  const channels = Math.min(2, Math.max(1, source.numberOfChannels));
+  const length = Math.max(1, Math.ceil(opts.total * sampleRate));
+  const out = new AudioBuffer({ length, numberOfChannels: channels, sampleRate });
+  const outData = Array.from({ length: channels }, (_, c) => out.getChannelData(c));
+  const start = Math.min(Math.max(0, Math.round(opts.from * sampleRate)), Math.max(0, source.length - 1));
+  const usable = Math.max(1, source.length - start);
+  const volume = opts.volume ?? 1;
+  for (let c = 0; c < channels; c++) {
+    const src = source.getChannelData(Math.min(c, source.numberOfChannels - 1));
+    const dst = outData[c];
+    for (let pos = 0; pos < length; pos += usable) {
+      const n = Math.min(usable, length - pos);
+      for (let i = 0; i < n; i++) dst[pos + i] = src[start + i] * volume;
+      if (!opts.loop) break;
+    }
+  }
+  if (opts.loop && usable < length) {
+    for (let pos = 0; pos < length; pos += usable) fade(outData, pos, Math.min(length, pos + usable), Math.round(sampleRate * 0.01));
+  }
+  const fadeFrames = Math.min(length, Math.round(sampleRate * (opts.fadeOut ?? 0.5)));
+  for (const ch of outData) for (let i = 0; i < fadeFrames; i++) ch[length - fadeFrames + i] *= 1 - i / fadeFrames;
+
+  const rate = opts.sampleRate ?? (sampleRate === 44100 || sampleRate === 48000 ? sampleRate : 48000);
+  if (rate === sampleRate) return out;
+  const offline = new OfflineAudioContext(channels, Math.ceil(opts.total * rate), rate);
+  const node = offline.createBufferSource();
+  node.buffer = out;
+  node.connect(offline.destination);
+  node.start();
+  return offline.startRendering();
+}
+
 function fade(data: Float32Array[], start: number, end: number, frames: number) {
   if (end - start < frames * 2) return;
   for (const ch of data) {

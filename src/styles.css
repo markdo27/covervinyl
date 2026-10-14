@@ -2066,3 +2066,46 @@ select.section-mode {
   color: var(--muted);
   opacity: 0.6;
 }
+
+/* ------------------------------------------------------------------ */
+/* Audio enhance                                                       */
+/* ------------------------------------------------------------------ */
+
+.enhance {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+}
+
+.text-section .enhance {
+  background: var(--panel);
+}
+
+.enhance-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.enhance-status.is-error {
+  color: #ff8b7d;
+}
+
+.enhance-bar {
+  display: block;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.enhance-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  transition: width 0.2s;
+}

@@ -6,6 +6,7 @@
  *
  * Pure data functions; reading and writing actual files is in lib/presetFiles.ts.
  */
+import type { AudioEnhance } from './audioEnhance';
 import { defaultProject, newSlide, uid } from './defaults';
 import { defaultFlip, type FlipCredits, type FlipProject } from './flip';
 import { CUSTOM_LUT_PREFIX, LOOKS, type Lut } from './luts';
@@ -84,7 +85,7 @@ export interface ReelPresetSettings {
   export: ExportSettings;
 }
 
-export type FlipPartSettings = FlipCredits & { duration: number; volume: number };
+export type FlipPartSettings = FlipCredits & { duration: number; volume: number; enhance: AudioEnhance };
 
 export interface FlipPresetSettings
   extends Pick<
@@ -127,7 +128,7 @@ export interface GroupInfo<G extends PresetGroup = PresetGroup> {
 }
 
 export const COVER_GROUPS: GroupInfo<CoverGroup>[] = [
-  { key: 'style', label: 'Text style & layout', detail: 'Fonts, text size and colour, covers, placement, motion, clip framing, format' },
+  { key: 'style', label: 'Text style & layout', detail: 'Fonts, text size and colour, covers, placement, motion, clip framing and audio clean-up, format' },
   { key: 'look', label: 'Look & grain', detail: 'Colour look or LUT, grain, vignette' },
   { key: 'sections', label: 'Text sections', detail: 'Which sections, their sizes, spacing and colours, footer text' },
   { key: 'slides', label: 'Slide text', detail: 'Each slide’s text, morph intro and duration — your covers stay' },
@@ -144,7 +145,7 @@ export const FLIP_GROUPS: GroupInfo<FlipGroup>[] = [
   { key: 'style', label: 'Text style & layout', detail: 'Fonts, sizes, colours, tag colour, position, labels, transition, format' },
   { key: 'look', label: 'Look & grain', detail: 'Colour look or LUT, grain, vignette' },
   { key: 'credits', label: 'Credits & text', detail: 'Both tracks’ credits and story, the opening line, which plays first' },
-  { key: 'timing', label: 'Lengths & sound', detail: 'How long each clip and the opening line last; clip volumes' },
+  { key: 'timing', label: 'Lengths & sound', detail: 'How long each clip and the opening line last; clip volumes and audio clean-up' },
   { key: 'endCard', label: 'End card', detail: 'Logo, logo colour and size, text and duration' },
 ];
 
@@ -157,7 +158,7 @@ export function presetGroups(mode: PresetMode): GroupInfo[] {
 /* ------------------------------------------------------------------ */
 
 export function coverPresetSettings(p: Project): CoverPresetSettings {
-  const { zoom, panX, panY, dim, loop, audio } = p.video;
+  const { zoom, panX, panY, dim, loop, audio, enhance } = p.video;
   const { enabled, logoSize, logoColor, text, duration } = p.endCard;
   return {
     ratio: p.ratio,
@@ -165,7 +166,7 @@ export function coverPresetSettings(p: Project): CoverPresetSettings {
     cover: p.cover,
     placement: p.placement,
     safeArea: p.safeArea,
-    video: { zoom, panX, panY, dim, loop, audio },
+    video: { zoom, panX, panY, dim, loop, audio, enhance },
     motion: p.motion,
     sections: p.sections,
     slides: p.slides.map((s) => ({ texts: s.texts, morphFrom: s.morphFrom, duration: s.duration })),
@@ -202,8 +203,8 @@ export function reelPresetSettings(p: ReelProject): ReelPresetSettings {
 
 export function flipPresetSettings(p: FlipProject): FlipPresetSettings {
   const part = (k: number): FlipPartSettings => {
-    const { tag, title, artist, released, album, genre, story, duration, volume } = p.parts[k];
-    return { tag, title, artist, released, album, genre, story, duration, volume };
+    const { tag, title, artist, released, album, genre, story, duration, volume, enhance } = p.parts[k];
+    return { tag, title, artist, released, album, genre, story, duration, volume, enhance };
   };
   return {
     ratio: p.ratio,
@@ -356,7 +357,7 @@ export function applyFlipPreset(p: FlipProject, s: FlipPresetSettings, groups: R
   }
   if (groups.has('timing')) {
     s.parts.forEach((ps, k) => {
-      parts[k] = { ...parts[k], duration: ps.duration, volume: ps.volume };
+      parts[k] = { ...parts[k], duration: ps.duration, volume: ps.volume, enhance: ps.enhance };
     });
     next.hook = { ...next.hook, duration: s.hook.duration };
   }

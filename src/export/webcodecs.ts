@@ -13,6 +13,7 @@ import {
   chooseVideoCodec,
   decodeAudioSpan,
   encodeFrames,
+  spanFromBuffer,
   WebCodecsUnavailableError,
 } from './encoder';
 import type { ExportJob, ExportResult } from './types';
@@ -48,7 +49,7 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
           for (let i = 0; i < frameCount; i++) yield first + sourceTime(i / fps, clip);
         })(),
       );
-      if (project.video.audio) {
+      if (project.video.audio && !job.enhancedAudio) {
         const at = await input.getPrimaryAudioTrack();
         if (at && (await at.canDecode())) audioTrack = at;
         else if (at) notes.push("The clip's audio codec couldn't be decoded here, so the export is silent.");
@@ -56,7 +57,9 @@ export async function exportWithWebCodecs(job: ExportJob): Promise<ExportResult>
     }
 
     let audio: AudioBuffer | null = null;
-    if (audioTrack) {
+    if (project.video.audio && job.enhancedAudio) {
+      audio = await spanFromBuffer(job.enhancedAudio, { from: project.video.start, loop: project.video.loop, total: timeline.total });
+    } else if (audioTrack) {
       onProgress(0, 'Preparing audio…');
       audio = await decodeAudioSpan(audioTrack, {
         from: first + Math.min(project.video.start, Math.max(0, clipEnd - first - 0.05)),

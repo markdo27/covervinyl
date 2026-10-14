@@ -1,5 +1,7 @@
 import { NEW, type FlipPart, type FlipProject, type FlipTimeline } from '../../engine/flip';
 import type { MediaAsset } from '../../engine/reel';
+import type { EnhanceStatus } from '../../lib/audioEnhance';
+import { AudioEnhanceFields } from '../AudioEnhanceFields';
 import { formatTime } from '../../engine/timeline';
 import { formatBytes } from '../../lib/media';
 import { FileDrop, NumberField, Section, Segmented, Slider } from '../ui';
@@ -14,11 +16,12 @@ interface Props {
   onFootageFile: (part: number, file: File) => void;
   onRemoveFootage: (part: number) => void;
   onSelectPart: (part: number) => void;
+  enhanceStatus: [EnhanceStatus, EnhanceStatus];
 }
 
 export const partName = (part: number) => (part === NEW ? 'New track' : 'Original');
 
-export function FlipClipsStep({ project, update, timeline, footage, onFootageFile, onRemoveFootage, onSelectPart }: Props) {
+export function FlipClipsStep({ project, update, timeline, footage, onFootageFile, onRemoveFootage, onSelectPart, enhanceStatus }: Props) {
   const setPart = (part: number, patch: Partial<FlipPart>) =>
     update((p) => {
       const parts = [...p.parts] as FlipProject['parts'];
@@ -132,6 +135,13 @@ export function FlipClipsStep({ project, update, timeline, footage, onFootageFil
                 step={0.01}
                 format={(x) => (x <= 0 ? 'Muted' : `${Math.round(x * 100)}%`)}
                 onChange={(volume) => setPart(part, { volume })}
+              />
+            )}
+            {asset?.kind === 'video' && settings.volume > 0 && (
+              <AudioEnhanceFields
+                value={settings.enhance}
+                onChange={(patch) => setPart(part, { enhance: { ...settings.enhance, ...patch } })}
+                status={enhanceStatus[part]}
               />
             )}
             {usable > 0 && usable < settings.duration && (

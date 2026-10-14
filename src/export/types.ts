@@ -10,6 +10,8 @@ export interface ExportJob {
   height: number;
   fps: number;
   video: VideoAsset | null;
+  /** The clip's cleaned-up sound when audio enhance is on (see lib/audioEnhance.ts). */
+  enhancedAudio?: AudioBuffer | null;
   getImage: (id: string | null) => DrawableImage | null;
   getLut: (key: string) => Lut | null;
   signal: AbortSignal;

@@ -21,7 +21,7 @@ Everything runs in the browser. Files are never uploaded anywhere.
 
 | Step | What you do |
 | --- | --- |
-| **1. Recorded video** | Upload the clip that plays in the background (MP4 / MOV / WebM). Trim the start, zoom, reposition, darken, loop, keep or drop its audio. |
+| **1. Recorded video** | Upload the clip that plays in the background (MP4 / MOV / WebM). Trim the start, zoom, reposition, darken, loop, keep or drop its audio, and *Enhance audio* for phone recordings (see below). |
 | **2. Album covers** | Upload one or more covers — each becomes a slide. Upcoming covers peek out behind the current one like records in a crate. Reorder, replace or add slides. |
 | **3. Text** | Text is a stack of sections you can add, remove, rename and reorder. Each section is either *different on each slide* (e.g. the credits) or *the same on every slide* (e.g. a footer), with its own size, spacing and colour — keep one kind, both, or none for covers only. Pick a default text colour, or colour individual words with the toolbar's colour button. The first per-slide section can have a "morph intro" so its title grows from one text into another (e.g. `jazz**matic**` → `jazz samples: **illmatic**`). |
 | **4. Fonts** | Upload your own `.ttf` / `.otf` / `.woff` / `.woff2` files (drop Regular, Bold and Italic together). The family name and weight are read from the font file itself. |
@@ -67,7 +67,7 @@ again — in the same editor it was saved from, switching modes if needed.
 
 | Step | What you do |
 | --- | --- |
-| **1. The two clips** | Upload a clip (or photo) for the new track and one for the original it samples. Each plays with its own sound; set where it starts, how long it's on screen and its volume. Choose which plays first (new track first by default) and how they switch: push, fade, flash or cut. |
+| **1. The two clips** | Upload a clip (or photo) for the new track and one for the original it samples. Each plays with its own sound; set where it starts, how long it's on screen, its volume and *Enhance audio* (see below). Choose which plays first (new track first by default) and how they switch: push, fade, flash or cut. |
 | **2. Credits** | For each track: album cover, tag (NEW / ORIGINAL), title, artist, release date, album, genre and a short story. Labels ("Released", "Album", "Genre") can be renamed or hidden. An optional opening line ("the sample behind **{new}**") shows before the first credits. |
 | **3. Layout & text style** | Credits at the top, middle or bottom, cover size, text sizes, colours, tag colour and a dark backdrop behind the text. *Keep text inside Instagram's safe zone* (on by default) keeps everything clear of Instagram's UI and shrinks long text to fit. |
 | **4. Fonts** | Your own fonts, as in Cover Crate. |
@@ -76,6 +76,24 @@ again — in the same editor it was saved from, switching modes if needed.
 
 `{new}`, `{original}`, `{new-artist}`, `{original-artist}`, `{new-year}` and `{original-year}`
 fill in from the credits in the opening line and the end card text.
+
+## Audio enhance
+
+For clips recorded on a phone's microphone (a record playing in a room), *Enhance audio* cleans
+up the clip's sound — in Cover Crate's step 1 and for each clip in Sample Flip:
+
+- **Noise reduction** learns the clip's steady background noise (hiss, hum, air-con, room tone)
+  and turns it down wherever the music doesn't rise above it.
+- **Cut rumble** removes low thumps below ~75 Hz (handling, wind, traffic).
+- **Music clarity** takes out boxy room boom, lifts presence and gently compresses so quiet
+  passages come forward.
+- **Instagram loudness** brings the level to −14 LUFS with a peak limiter (−1 dBFS).
+
+It runs in the browser (in a background worker) and shows what it did, e.g. "background noise
+−22 dB · loudness −29 → −14 LUFS". The preview plays the cleaned-up sound — switch *Enhance
+audio* off and on while it plays to compare — and both export paths use exactly the same
+sound. It can't remove people talking or other music in the room; it works best on steady
+noise.
 
 ### Text markup
 
@@ -110,7 +128,7 @@ Produced by {#e2402f}**DJ Premier**{/}
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel, flip, presets)
+npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel, flip, presets, audio)
 npm run build      # static site in dist/
 ```
 
@@ -136,6 +154,9 @@ src/engine/      rendering engine (framework-free)
   flipRenderer.ts  Sample Flip frame: clips, credits layout, opening line, end card
   flipMedia.ts     keeps the two Sample Flip clips (with sound) in sync with the playhead
   safeZone.ts      Instagram's safe area, lifting text out of the caption zone, guides
+  audioEnhance.ts  clip sound clean-up: spectral noise reduction, rumble cut, clarity EQ +
+                   compressor, EBU R128 loudness, look-ahead limiter
+  bufferPlayer.ts  plays a decoded soundtrack in step with the preview playhead
   textDraw.ts      drawing laid-out text lines (shadow, motion smear)
   textLayout.ts    rich-text layout + word wrap on canvas
   markup.ts        **bold** / *italic* / ~light~ / # headline parser
@@ -150,7 +171,8 @@ src/engine/      rendering engine (framework-free)
 src/export/      encoder.ts (shared WebCodecs plumbing), webcodecs.ts + recorder.ts (Cover
                  Crate, fast + real-time), reel.ts (Photo Reel), flip.ts (Sample Flip)
 src/components/  React UI: Player (shared preview shell), steps for each mode, export + preset dialogs
-src/lib/         file loading (media.ts) and preset files (presetFiles.ts)
+src/lib/         file loading (media.ts), preset files (presetFiles.ts), audio enhance worker +
+                 cache (audioEnhance.ts)
 src/CoverApp.tsx, src/ReelApp.tsx, src/FlipApp.tsx   the three editors; App.tsx switches between them
 ```
 
