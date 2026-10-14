@@ -9,7 +9,7 @@ top bar:
 - **Photo Reel** — your photos and clips cut on the beat, with your own animation (with
   transparency) looping on top, graded with film looks and grain.
 - **Sample Flip** — two clips back to back: a track and the original it samples, each with its
-  own cover and credits, then both covers side by side.
+  own cover and credits, then your logo on an end card.
 
 Both export a 9:16 or 3:4 video ready for Instagram.
 
@@ -55,7 +55,7 @@ again — in the same editor it was saved from, switching modes if needed.
   slide's text and duration, and the end card. **Photo Reel** presets hold the animation-on-top
   settings, look & grain, and timing & format (shot length, BPM, transition, zoom, music volume,
   ratio, export). **Sample Flip** presets hold the text style and layout, look & grain, both
-  tracks' credits (plus the opening line and closing text), and the clip lengths and volumes.
+  tracks' credits (plus the opening line), the clip lengths and volumes, and the end card.
 - Your own files can ride along inside the preset — uploaded fonts, a `.cube` LUT, the end-card
   logo, the overlay animation — so it works on another computer too. The save dialog lists them
   with their sizes; untick any you don't need.
@@ -72,10 +72,10 @@ again — in the same editor it was saved from, switching modes if needed.
 | **3. Layout & text style** | Credits at the top, middle or bottom, cover size, text sizes, colours, tag colour and a dark backdrop behind the text. *Keep text inside Instagram's safe zone* (on by default) keeps everything clear of Instagram's UI and shrinks long text to fit. |
 | **4. Fonts** | Your own fonts, as in Cover Crate. |
 | **5. Look & grain** | Colour looks / `.cube` LUTs, grain and vignette on the clips (optionally on the text too). |
-| **6. Closing card & export** | Both covers side by side (original → new) with your own line underneath, then 9:16 or 3:4 export. |
+| **6. End card & export** | Your logo (optionally recoloured) and a line of text over the last clip, as in Cover Crate, then 9:16 or 3:4 export. |
 
 `{new}`, `{original}`, `{new-artist}`, `{original-artist}`, `{new-year}` and `{original-year}`
-fill in from the credits in the opening line and the closing card.
+fill in from the credits in the opening line and the end card text.
 
 ### Text markup
 
@@ -133,7 +133,7 @@ src/engine/      rendering engine (framework-free)
   overlay.ts       overlay uploads: alpha video, PNG sequence, GIF/APNG/WebP, still
   reelMedia.ts     keeps reel clips / overlay / soundtrack elements in sync with the playhead
   flip.ts          Sample Flip model, defaults, timing, transitions and the clips' crossfade
-  flipRenderer.ts  Sample Flip frame: clips, credits layout, opening line, closing card
+  flipRenderer.ts  Sample Flip frame: clips, credits layout, opening line, end card
   flipMedia.ts     keeps the two Sample Flip clips (with sound) in sync with the playhead
   safeZone.ts      Instagram's safe area, lifting text out of the caption zone, guides
   textDraw.ts      drawing laid-out text lines (shadow, motion smear)

@@ -1,13 +1,13 @@
-/** Draws Sample Flip frames: the two clips, their credits, the opening hook and the closing card. */
+/** Draws Sample Flip frames: the two clips, their credits, the opening hook and the end card. */
 import type { LayeredFrame } from './compositor';
-import { clamp01, easeInCubic, easeOutCubic, easeOutExpo, lerp } from './easing';
-import { creditsMarkup, fillTemplate, flipLayersAt, NEW, ORIGINAL, yearOf, type FlipProject, type FlipTimeline } from './flip';
+import { clamp01, easeInCubic, easeOutCubic, easeOutExpo } from './easing';
+import { creditsMarkup, fillTemplate, flipLayersAt, NEW, ORIGINAL, type FlipProject, type FlipTimeline } from './flip';
 import { fontStack, fontString } from './fonts';
 import type { Lut } from './luts';
 import { drawPlaceholderBackground, placeholderCover } from './placeholder';
-import type { DrawableImage } from './renderer';
+import { tintedImage, type DrawableImage } from './renderer';
 import { SAFE_AREAS, type SafeArea } from './safeZone';
-import { drawTextLine, roundRect, setTextShadow } from './textDraw';
+import { drawTextLine, roundRect } from './textDraw';
 import { cachedLayout, type TextBlock, type TextMetricsStyle } from './textLayout';
 
 export interface FlipRenderInput {
@@ -64,7 +64,7 @@ export function drawFootage(ctx: CanvasRenderingContext2D, W: number, H: number,
   ctx.imageSmoothingQuality = 'high';
 
   const { layers, flash, outro } = flipLayersAt(p, tl, t);
-  // Dark gradient behind each part's credits, easing away for the closing card.
+  // Dark gradient behind each part's credits, easing away for the end card.
   const scrim = p.layout.scrim * (1 - outro);
   for (const layer of layers) {
     const span = tl.parts[layer.part];
@@ -90,7 +90,7 @@ export function drawFootage(ctx: CanvasRenderingContext2D, W: number, H: number,
     ctx.restore();
   }
 
-  // Closing card: the last clip goes soft and dark behind the covers.
+  // End card: the last clip goes soft and dark behind the logo.
   if (outro > 0) {
     const e = easeOutCubic(outro);
     blurCanvas ??= document.createElement('canvas');
@@ -383,85 +383,45 @@ function drawHook(ctx: CanvasRenderingContext2D, W: number, H: number, input: Fl
   });
 }
 
+/** The end card: the logo (optionally recoloured) and a line of text, centred in the safe area. */
 function drawOutro(ctx: CanvasRenderingContext2D, W: number, H: number, input: FlipRenderInput) {
   const { project: p, timeline: tl, t } = input;
-  const local = t - tl.outroStart;
-  const style = textStyle(p, W, 0.9);
+  const v = clamp01((t - tl.outroStart - 0.15) / 0.5);
+  if (v <= 0) return;
+  const eased = easeOutExpo(v);
+  const style = textStyle(p, W, 1);
   const line = style.bodyPx * style.lineHeight;
   const area = textArea(p);
-  const size = W * 0.3;
-  const gap = W * 0.14;
-  const x0 = (W - (size * 2 + gap)) / 2;
-  const coverTop = (area.top + (area.bottom - area.top) * 0.3) * H - size / 2;
-  const colWidth = size + gap * 0.8;
+  const logo = input.getImage(p.outro.logoId);
+  const text = fillTemplate(p.outro.text, p);
+  const block = text.trim() ? cachedLayout(ctx, text, style, (area.right - area.left) * W) : null;
 
-  // Original on the left, the new track on the right: sample → flip.
-  [ORIGINAL, NEW].forEach((part, side) => {
-    const credits = p.parts[part];
-    const v = clamp01((local - 0.1 - side * 0.12) / 0.8);
-    const e = easeOutExpo(v);
-    const alpha = easeOutCubic(v);
-    if (alpha <= 0.003) return;
-    const x = x0 + side * (size + gap) + (side === 0 ? -1 : 1) * (1 - e) * W * 0.08;
-    const img = input.getImage(credits.coverId) ?? { source: placeholderCover(part === NEW ? 0 : 6), width: 512, height: 512 };
-    drawSquare(ctx, img, x, coverTop, size, alpha, (1 - e) * W * 0.01);
-
-    const cx = x + size / 2;
-    let y = coverTop + size + W * 0.04;
-    const tag = measureTag(ctx, credits.tag, style, 0.9);
-    if (tag) {
-      drawTag(ctx, tag, cx - tag.width / 2, y, alpha, p.accent);
-      y += tag.height + line * 0.3;
-    }
-    const year = yearOf(credits.released);
-    const markup = [
-      credits.title.trim() && `**${credits.title.trim()}**`,
-      [credits.artist.trim(), year].filter(Boolean).length ? `~${[credits.artist.trim(), year].filter(Boolean).join(' · ')}~` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-    if (markup) {
-      const block = cachedLayout(ctx, markup, style, colWidth);
-      for (const l of block.lines) {
-        drawTextLine(ctx, l, cx - l.width / 2, y + l.top + (1 - e) * line, { alpha, color: p.text.color, shadow: p.text.shadow });
-      }
-    }
-  });
-
-  // The arrow between the two covers draws itself.
-  const a = clamp01((local - 0.45) / 0.5);
-  if (a > 0) {
-    const ax = x0 + size + gap * 0.22;
-    const len = gap * 0.56;
-    const ay = coverTop + size / 2;
-    const head = W * 0.022;
-    ctx.save();
-    setTextShadow(ctx, W, p.text.shadow);
-    ctx.strokeStyle = p.text.color;
-    ctx.lineWidth = W * 0.007;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalAlpha = easeOutCubic(a);
-    const tip = ax + len * easeOutCubic(a);
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(tip, ay);
-    ctx.moveTo(tip - head, ay - head);
-    ctx.lineTo(tip, ay);
-    ctx.lineTo(tip - head, ay + head);
-    ctx.stroke();
-    ctx.restore();
+  let logoW = 0;
+  let logoH = 0;
+  if (logo) {
+    logoW = p.outro.logoSize * W;
+    logoH = logoW * (logo.height / logo.width);
   }
+  const gap = logo && block ? W * 0.04 : 0;
+  const total = logoH + gap + (block?.height ?? 0);
+  let y = ((area.top + area.bottom) / 2) * H - total / 2 + (1 - eased) * W * 0.03;
 
-  if (p.outro.text.trim()) {
-    const v = clamp01((local - 0.6) / 0.7);
-    const block = cachedLayout(ctx, fillTemplate(p.outro.text, p), style, (area.right - area.left) * W);
-    const top = (area.top + (area.bottom - area.top) * 0.82) * H - block.height / 2;
+  if (logo) {
+    ctx.save();
+    ctx.globalAlpha = easeOutCubic(v);
+    if (v < 1) ctx.filter = `blur(${((1 - eased) * W * 0.01).toFixed(1)}px)`;
+    const source = p.outro.logoColor ? tintedImage(logo, p.outro.logoColor) : logo.source;
+    ctx.drawImage(source, (W - logoW) / 2, y, logoW, logoH);
+    ctx.restore();
+    y += logoH + gap;
+  }
+  if (block) {
     for (const l of block.lines) {
-      drawTextLine(ctx, l, (W - l.width) / 2, top + l.top + lerp(line * 0.6, 0, easeOutExpo(v)), {
+      drawTextLine(ctx, l, (W - l.width) / 2, y + l.top, {
         alpha: easeOutCubic(v),
         color: p.text.color,
         shadow: p.text.shadow,
+        smearY: (1 - eased) * line * 0.6,
       });
     }
   }

@@ -89,8 +89,10 @@ export type FlipPartSettings = FlipCredits & { duration: number; volume: number 
 export interface FlipPresetSettings
   extends Pick<
     FlipProject,
-    'ratio' | 'first' | 'transition' | 'hook' | 'showLabels' | 'labels' | 'layout' | 'text' | 'accent' | 'footage' | 'outro' | 'post' | 'export'
+    'ratio' | 'first' | 'transition' | 'hook' | 'showLabels' | 'labels' | 'layout' | 'text' | 'accent' | 'footage' | 'post' | 'export'
   > {
+  /** The end card, minus the logo itself (that travels in `files.logo`). */
+  outro: Omit<EndCard, 'logoId'>;
   /** [new track, original]: credits, length and sound — not the clips or covers. */
   parts: [FlipPartSettings, FlipPartSettings];
 }
@@ -115,7 +117,7 @@ export type Preset = CoverPreset | ReelPreset | FlipPreset;
 
 export type CoverGroup = 'style' | 'look' | 'sections' | 'slides' | 'endCard';
 export type ReelGroup = 'overlay' | 'look' | 'timing';
-export type FlipGroup = 'style' | 'look' | 'credits' | 'timing';
+export type FlipGroup = 'style' | 'look' | 'credits' | 'timing' | 'endCard';
 export type PresetGroup = CoverGroup | ReelGroup | FlipGroup;
 
 export interface GroupInfo<G extends PresetGroup = PresetGroup> {
@@ -141,8 +143,9 @@ export const REEL_GROUPS: GroupInfo<ReelGroup>[] = [
 export const FLIP_GROUPS: GroupInfo<FlipGroup>[] = [
   { key: 'style', label: 'Text style & layout', detail: 'Fonts, sizes, colours, tag colour, position, labels, transition, format' },
   { key: 'look', label: 'Look & grain', detail: 'Colour look or LUT, grain, vignette' },
-  { key: 'credits', label: 'Credits & text', detail: 'Both tracks’ credits and story, the opening line, the closing card text, which plays first' },
-  { key: 'timing', label: 'Lengths & sound', detail: 'How long each clip, the opening line and the closing card last; clip volumes' },
+  { key: 'credits', label: 'Credits & text', detail: 'Both tracks’ credits and story, the opening line, which plays first' },
+  { key: 'timing', label: 'Lengths & sound', detail: 'How long each clip and the opening line last; clip volumes' },
+  { key: 'endCard', label: 'End card', detail: 'Logo, logo colour and size, text and duration' },
 ];
 
 export function presetGroups(mode: PresetMode): GroupInfo[] {
@@ -213,7 +216,7 @@ export function flipPresetSettings(p: FlipProject): FlipPresetSettings {
     text: p.text,
     accent: p.accent,
     footage: p.footage,
-    outro: p.outro,
+    outro: { enabled: p.outro.enabled, logoSize: p.outro.logoSize, logoColor: p.outro.logoColor, text: p.outro.text, duration: p.outro.duration },
     post: p.post,
     export: p.export,
     parts: [part(0), part(1)],
@@ -320,6 +323,8 @@ export function applyReelPreset(p: ReelProject, s: ReelPresetSettings, groups: R
 
 export interface FlipApplyContext extends ApplyContext {
   hasFont: (key: string) => boolean;
+  /** The preset's logo once loaded, or null to keep the current logo. */
+  logoId: string | null;
 }
 
 export function applyFlipPreset(p: FlipProject, s: FlipPresetSettings, groups: ReadonlySet<PresetGroup>, ctx: FlipApplyContext): FlipProject {
@@ -348,15 +353,14 @@ export function applyFlipPreset(p: FlipProject, s: FlipPresetSettings, groups: R
     });
     next.first = s.first;
     next.hook = { ...next.hook, enabled: s.hook.enabled, text: s.hook.text };
-    next.outro = { ...next.outro, text: s.outro.text };
   }
   if (groups.has('timing')) {
     s.parts.forEach((ps, k) => {
       parts[k] = { ...parts[k], duration: ps.duration, volume: ps.volume };
     });
     next.hook = { ...next.hook, duration: s.hook.duration };
-    next.outro = { ...next.outro, enabled: s.outro.enabled, duration: s.outro.duration };
   }
+  if (groups.has('endCard')) next.outro = { ...s.outro, logoId: ctx.logoId ?? p.outro.logoId };
   next.parts = parts;
   return next;
 }

@@ -1,33 +1,38 @@
 import { OUTPUT_SIZES } from '../../engine/defaults';
 import type { FlipProject, FlipTimeline } from '../../engine/flip';
 import { formatTime } from '../../engine/timeline';
-import { MarkupEditor } from '../MarkupEditor';
+import type { ImageAsset } from '../../engine/types';
+import { EndCardFields } from '../EndCardFields';
 import { Section, Segmented, Slider, Toggle } from '../ui';
 
 interface Props {
   project: FlipProject;
   update: (fn: (p: FlipProject) => FlipProject) => void;
   timeline: FlipTimeline;
+  images: Map<string, ImageAsset>;
+  onLogoFile: (file: File) => void;
   onExport: () => void;
   exporting: boolean;
 }
 
-export function FlipExportStep({ project, update, timeline, onExport, exporting }: Props) {
+export function FlipExportStep({ project, update, timeline, images, onLogoFile, onExport, exporting }: Props) {
   const setExport = (patch: Partial<FlipProject['export']>) => update((p) => ({ ...p, export: { ...p.export, ...patch } }));
   const setOutro = (patch: Partial<FlipProject['outro']>) => update((p) => ({ ...p, outro: { ...p.outro, ...patch } }));
   const [w, h] = OUTPUT_SIZES[project.ratio][project.export.resolution];
+  const logo = project.outro.logoId ? images.get(project.outro.logoId) : undefined;
 
   return (
-    <Section step={6} title="Closing card & export" subtitle="Both covers side by side, canvas and download">
+    <Section step={6} title="End card & export" subtitle="Your logo at the end, canvas and download">
       <div className="text-section">
         <Toggle
-          label="Closing card"
-          hint="The original and the new track side by side: sample → flip"
+          label="End card"
+          hint="Your logo and a line of text over the last clip, as in Cover Crate"
           checked={project.outro.enabled}
           onChange={(enabled) => setOutro({ enabled })}
         />
         {project.outro.enabled && (
           <>
+            <EndCardFields endCard={project.outro} logo={logo} onChange={setOutro} onLogoFile={onLogoFile} />
             <Slider
               label="Shown for"
               value={project.outro.duration}
@@ -36,13 +41,6 @@ export function FlipExportStep({ project, update, timeline, onExport, exporting 
               step={0.1}
               format={(x) => `${x.toFixed(1)}s`}
               onChange={(duration) => setOutro({ duration })}
-            />
-            <MarkupEditor
-              value={project.outro.text}
-              onChange={(text) => setOutro({ text })}
-              rows={2}
-              placeholder="**your name** archives"
-              ariaLabel="Closing card text"
             />
           </>
         )}

@@ -1,11 +1,11 @@
 /**
  * Sample Flip mode: two clips back to back — a track and the original it
- * samples — each with its own cover and credits, then an optional card
- * showing both side by side. Model, defaults and timing — no DOM.
+ * samples — each with its own cover and credits, then an optional end card
+ * with the user's logo. Model, defaults and timing — no DOM.
  */
 import { easeInOutCubic } from './easing';
 import { stripMarkup } from './markup';
-import type { ExportSettings, PostSettings, Ratio, TextStyle } from './types';
+import type { EndCard, ExportSettings, PostSettings, Ratio, TextStyle } from './types';
 
 export type FlipRole = 'new' | 'original';
 export type FlipTransition = 'cut' | 'fade' | 'flash' | 'push';
@@ -79,8 +79,8 @@ export interface FlipProject {
     /** Slow push-in over each part, 0..0.25. */
     zoom: number;
   };
-  /** Closing card: both covers side by side. */
-  outro: { enabled: boolean; duration: number; text: string };
+  /** End card: your logo and a line of text, as in Cover Crate. */
+  outro: EndCard;
   post: PostSettings;
   export: ExportSettings;
 }
@@ -151,7 +151,7 @@ export function defaultFlip(): FlipProject {
     },
     accent: '#e2402f',
     footage: { dim: 0.08, zoom: 0.06 },
-    outro: { enabled: true, duration: 3, text: '**your name** archives' },
+    outro: { enabled: true, logoId: null, logoSize: 0.28, logoColor: null, text: '**your name** archives', duration: 2.5 },
     post: { lut: 'film-print', lutIntensity: 0.45, grain: 0.25, grainSize: 1.5, vignette: 0.2 },
     export: { resolution: 1080, fps: 30, method: 'auto' },
   };
@@ -249,7 +249,7 @@ export interface FlipLayers {
   layers: FlipLayer[];
   /** 0..1 white flash after the cut. */
   flash: number;
-  /** 0..1 progress into the closing card. */
+  /** 0..1 progress into the end card. */
   outro: number;
 }
 

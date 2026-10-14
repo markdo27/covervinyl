@@ -21,11 +21,11 @@ import type { DrawableImage } from './engine/renderer';
 import { clearLayoutCache } from './engine/textLayout';
 import type { ImageAsset, PostSettings, TextStyle } from './engine/types';
 import { loadImageFile, loadReelMedia } from './lib/media';
-import { embedFile } from './lib/presetFiles';
+import { embedFile, unembedFile } from './lib/presetFiles';
 
 /**
  * Sample Flip mode: the new track's clip and the original it samples, back
- * to back, each with its own cover and credits, then both side by side.
+ * to back, each with its own cover and credits, then an end card with your logo.
  */
 export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPreset }: ModeProps) {
   const [project, setProject] = useState<FlipProject>(defaultFlip);
@@ -122,6 +122,12 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
     if (asset) setPart(part, { coverId: asset.id });
   };
 
+  const onLogoFile = async (file: File) => {
+    const asset = await addCover(file);
+    if (asset) update((p) => ({ ...p, outro: { ...p.outro, logoId: asset.id, enabled: true } }));
+  };
+  const logoAsset = () => (project.outro.logoId ? covers.get(project.outro.logoId) : undefined);
+
   const onFontFiles = async (files: File[]) => {
     const loaded = await userFonts.addFiles(files);
     if (!loaded.length) return;
@@ -165,6 +171,8 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
       }
       const lut = looks.lutAttachment();
       if (lut) list.push(lut);
+      const logo = logoAsset();
+      if (logo) list.push({ key: 'logo', label: `Logo: ${logo.name}`, detail: 'End-card logo', bytes: logo.file.size });
       return list;
     },
     build: async (name, include) => {
@@ -173,6 +181,8 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
       if (include.has('fonts') && fontFiles.length) files.fonts = await Promise.all(fontFiles.map((f) => embedFile(f.file)));
       const lut = looks.customLut();
       if (include.has('lut') && lut) files.lut = embedLut(lut);
+      const logo = logoAsset();
+      if (include.has('logo') && logo) files.logo = await embedFile(logo.file);
       return makePreset(name, { mode: 'flip', settings: flipPresetSettings(project) }, files);
     },
     apply: async (preset, groups) => {
@@ -189,7 +199,9 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
         lutKey = look.lutKey;
         if (look.warning) warnings.push(look.warning);
       }
-      update((p) => applyFlipPreset(p, s, groups, { lutKey, hasFont: fontsLoaded.hasFont }));
+      let logoId: string | null = null;
+      if (groups.has('endCard') && preset.files.logo) logoId = (await addCover(await unembedFile(preset.files.logo)))?.id ?? null;
+      update((p) => applyFlipPreset(p, s, groups, { lutKey, logoId, hasFont: fontsLoaded.hasFont }));
       return warnings;
     },
   });
@@ -275,7 +287,15 @@ export function FlipApp({ active, mode, onModeChange, luts, pendingPreset, onPre
             onLutFile={looks.onLutFile}
             onRemoveLut={looks.onRemoveLut}
           />
-          <FlipExportStep project={project} update={update} timeline={timeline} onExport={onExport} exporting={exporter.exporting} />
+          <FlipExportStep
+            project={project}
+            update={update}
+            timeline={timeline}
+            images={covers}
+            onLogoFile={onLogoFile}
+            onExport={onExport}
+            exporting={exporter.exporting}
+          />
           <footer className="credits">Everything runs in your browser — your files never leave your device.</footer>
         </div>
 

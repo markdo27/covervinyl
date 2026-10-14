@@ -75,7 +75,7 @@ export function FlipCreditsStep({ project, update, covers, activePart, onSelectP
         </span>
         <div className="flip-cover-actions">
           <strong>Album cover</strong>
-          <small>{cover ? cover.name : 'Shown above the credits and on the closing card.'}</small>
+          <small>{cover ? cover.name : 'Shown above the credits.'}</small>
           <div className="inline-buttons">
             <PickFile accept="image/*" className="btn-ghost sm" onFile={(f) => onCoverFile(activePart, f)}>
               {cover ? 'Replace cover' : 'Upload cover'}
