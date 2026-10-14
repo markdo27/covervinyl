@@ -14,7 +14,7 @@ export async function loadImageFile(file: File): Promise<ImageAsset> {
     URL.revokeObjectURL(url);
     throw new Error(`"${file.name}" isn't an image this browser can open.`);
   }
-  return { id: uid('img'), name: file.name, url, image, width: image.naturalWidth, height: image.naturalHeight };
+  return { id: uid('img'), name: file.name, file, url, image, width: image.naturalWidth, height: image.naturalHeight };
 }
 
 export function loadVideoFile(file: File): Promise<VideoAsset> {

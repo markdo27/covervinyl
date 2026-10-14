@@ -42,6 +42,22 @@ shows where Instagram's UI covers a Reel.
 Animation tips: from After Effects, render *WebM (VP9) with alpha* or a *PNG sequence (RGB +
 Alpha)*. ProRes 4444 `.mov` files don't play in browsers; Safari can use HEVC-with-alpha `.mov`.
 
+## Presets
+
+**Save preset** (top bar) downloads your settings as one `.json` file; **Load preset** opens it
+again — in the same editor it was saved from, switching modes if needed.
+
+- **Cover Crate** presets hold the text style and layout, look & grain, text sections, every
+  slide's text and duration, and the end card. **Photo Reel** presets hold the animation-on-top
+  settings, look & grain, and timing & format (shot length, BPM, transition, zoom, music volume,
+  ratio, export).
+- Your own files can ride along inside the preset — uploaded fonts, a `.cube` LUT, the end-card
+  logo, the overlay animation — so it works on another computer too. The save dialog lists them
+  with their sizes; untick any you don't need.
+- Clips, covers, photos and music are never included, and loading a preset keeps them. When
+  loading you pick which parts to apply; slide text goes onto your current slides in order,
+  keeping their covers.
+
 ### Text markup
 
 ```
@@ -75,7 +91,7 @@ Produced by {#e2402f}**DJ Premier**{/}
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel)
+npm test           # unit tests (markup, layout, morph, timeline, fonts, sections, LUTs, reel, presets)
 npm run build      # static site in dist/
 ```
 
@@ -106,9 +122,11 @@ src/engine/      rendering engine (framework-free)
   luts.ts          built-in looks baked to 3D LUTs, .cube parser
   post.ts          WebGL2 post pass: LUT, vignette, film grain
   compositor.ts    layered frame + post pass, shared by previews and exporters
+  presets.ts       preset JSON format: capture, validate and apply settings per editor
 src/export/      encoder.ts (shared WebCodecs plumbing), webcodecs.ts + recorder.ts (Cover
                  Crate, fast + real-time), reel.ts (Photo Reel, fast + real-time)
-src/components/  React UI: Player (shared preview shell), steps for each mode, export dialog
+src/components/  React UI: Player (shared preview shell), steps for each mode, export + preset dialogs
+src/lib/         file loading (media.ts) and preset files (presetFiles.ts)
 src/CoverApp.tsx, src/ReelApp.tsx   the two editors; App.tsx switches between them
 ```
 

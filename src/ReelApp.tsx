@@ -5,19 +5,23 @@ import { MusicStep } from './components/reel/MusicStep';
 import { OverlayStep } from './components/reel/OverlayStep';
 import { ReelExportStep } from './components/reel/ReelExportStep';
 import { ReelPreview } from './components/reel/ReelPreview';
+import { usePresetDialogs, type Attachment } from './components/PresetDialogs';
 import { TopBar, useExportRunner, useNotice, useUnsavedWarning, type ModeProps } from './components/shell';
 import { FiltersStep } from './components/steps/FiltersStep';
 import { OUTPUT_SIZES } from './engine/defaults';
-import { loadOverlayFiles, releaseOverlay, type OverlayAsset } from './engine/overlay';
+import { CUSTOM_LUT_PREFIX } from './engine/luts';
+import { loadOverlayFiles, overlayFiles, releaseOverlay, type OverlayAsset } from './engine/overlay';
+import { applyReelPreset, embedLut, makePreset, reelPresetSettings, unembedLut, type PresetFiles } from './engine/presets';
 import { buildReelTimeline, defaultReel, newReelItem, type MediaAsset, type ReelProject } from './engine/reel';
 import type { MusicAsset } from './engine/reelMedia';
 import { isVideoFile, loadMusicFile, loadReelMedia } from './lib/media';
+import { embedFile, unembedFile } from './lib/presetFiles';
 
 /**
  * Photo Reel mode: the user's photos and clips cut on the beat, an
  * animation with transparency looping on top, graded with the same looks.
  */
-export function ReelApp({ active, mode, onModeChange, luts }: ModeProps) {
+export function ReelApp({ active, mode, onModeChange, luts, pendingPreset, onPreset }: ModeProps) {
   const [project, setProject] = useState<ReelProject>(defaultReel);
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [overlay, setOverlay] = useState<OverlayAsset | null>(null);
@@ -120,6 +124,66 @@ export function ReelApp({ active, mode, onModeChange, luts }: ModeProps) {
     }
   }, [luts, project.post.lut, update]);
 
+  /* ---------------- Presets ---------------- */
+
+  const customLut = () => (project.post.lut.startsWith(CUSTOM_LUT_PREFIX) ? luts.get(project.post.lut) : null);
+
+  const presets = usePresetDialogs({
+    mode: 'reel',
+    active,
+    pending: pendingPreset,
+    onPreset,
+    flash,
+    getAttachments: () => {
+      const list: Attachment[] = [];
+      if (overlay) {
+        const files = overlayFiles(overlay);
+        list.push({
+          key: 'overlay',
+          label: `Animation: ${overlay.name}`,
+          detail: files.length > 1 ? `${files.length} frames` : 'Your animation on top',
+          bytes: files.reduce((sum, f) => sum + f.size, 0),
+        });
+      }
+      const lut = customLut();
+      if (lut) list.push({ key: 'lut', label: `LUT: ${lut.name}`, detail: `Your .cube look (${lut.size}³)`, bytes: lut.size ** 3 * 3 });
+      return list;
+    },
+    build: async (name, include) => {
+      const files: PresetFiles = {};
+      if (include.has('overlay') && overlay) files.overlay = await Promise.all(overlayFiles(overlay).map(embedFile));
+      const lut = customLut();
+      if (include.has('lut') && lut) files.lut = embedLut(lut);
+      return makePreset(name, { mode: 'reel', settings: reelPresetSettings(project) }, files);
+    },
+    apply: async (preset, groups) => {
+      if (preset.mode !== 'reel') return [];
+      const s = preset.settings;
+      const warnings: string[] = [];
+
+      if (groups.has('overlay') && preset.files.overlay) {
+        try {
+          const asset = await loadOverlayFiles(await Promise.all(preset.files.overlay.map(unembedFile)));
+          setOverlay((old) => {
+            if (old) releaseOverlay(old);
+            return asset;
+          });
+        } catch (err) {
+          warnings.push(err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      let lutKey: string | null = null;
+      if (groups.has('look') && preset.files.lut) lutKey = luts.adopt(unembedLut(preset.files.lut, '')).key;
+      if (groups.has('look') && s.post.lut.startsWith(CUSTOM_LUT_PREFIX) && !lutKey) {
+        warnings.push(`its own LUT wasn't saved with it, so no colour look is applied.`);
+      }
+
+      update((p) => applyReelPreset(p, s, groups, { lutKey }));
+      return warnings;
+    },
+  });
+
   const selectShot = (i: number) => {
     setActiveShot(i);
     const start = timeline.starts[i];
@@ -159,7 +223,15 @@ export function ReelApp({ active, mode, onModeChange, luts }: ModeProps) {
 
   return (
     <div className="app" hidden={!active}>
-      <TopBar mode={mode} onModeChange={onModeChange} onExport={onExport} exporting={exporter.exporting} />
+      <TopBar
+        mode={mode}
+        onModeChange={onModeChange}
+        onExport={onExport}
+        exporting={exporter.exporting}
+        onSavePreset={presets.openSave}
+        onPreset={onPreset}
+        flash={flash}
+      />
 
       <main className="workspace">
         <div className="panels">
@@ -229,6 +301,7 @@ export function ReelApp({ active, mode, onModeChange, luts }: ModeProps) {
 
       {toast}
       {exporter.dialog}
+      {presets.dialogs}
     </div>
   );
 }

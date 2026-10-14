@@ -21,8 +21,9 @@ export type OverlayAsset =
       delays: number[] | null;
       /** Object URLs to revoke when the overlay is removed. */
       urls: string[];
+      files: File[];
     }
-  | { kind: 'image'; id: string; name: string; image: HTMLImageElement; url: string; width: number; height: number };
+  | { kind: 'image'; id: string; name: string; file: File; image: HTMLImageElement; url: string; width: number; height: number };
 
 export const OVERLAY_ACCEPT = 'video/webm,video/quicktime,video/mp4,.webm,.mov,.mp4,image/png,image/webp,image/gif,image/apng,.png,.webp,.gif,.apng';
 
@@ -124,6 +125,7 @@ export async function loadOverlayFiles(files: File[]): Promise<OverlayAsset> {
       height: first.naturalHeight,
       delays: null,
       urls: loaded.map((l) => l.url),
+      files: images,
     };
   }
 
@@ -139,10 +141,16 @@ export async function loadOverlayFiles(files: File[]): Promise<OverlayAsset> {
       height: animated.frames[0].height,
       delays: animated.delays,
       urls: [],
+      files: [file],
     };
   }
   const { image, url } = await loadImage(file);
-  return { kind: 'image', id: uid('ovl'), name: file.name, image, url, width: image.naturalWidth, height: image.naturalHeight };
+  return { kind: 'image', id: uid('ovl'), name: file.name, file, image, url, width: image.naturalWidth, height: image.naturalHeight };
+}
+
+/** The files the overlay was loaded from. */
+export function overlayFiles(asset: OverlayAsset): File[] {
+  return asset.kind === 'frames' ? asset.files : [asset.file];
 }
 
 export function releaseOverlay(asset: OverlayAsset): void {

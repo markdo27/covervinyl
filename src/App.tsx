@@ -3,6 +3,7 @@ import { CoverApp } from './CoverApp';
 import type { LutLibrary, Mode } from './components/shell';
 import { uid } from './engine/defaults';
 import { CUSTOM_LUT_PREFIX, parseCubeLut, presetLut, type Lut } from './engine/luts';
+import { sameLut, type Preset } from './engine/presets';
 import { ReelApp } from './ReelApp';
 
 /**
@@ -13,6 +14,7 @@ import { ReelApp } from './ReelApp';
 export default function App() {
   const [mode, setMode] = useState<Mode>(() => (window.location.hash === '#reel' ? 'reel' : 'cover'));
   const [customLuts, setCustomLuts] = useState<Lut[]>([]);
+  const [pendingPreset, setPendingPreset] = useState<Preset | null>(null);
 
   useEffect(() => {
     const url = `${window.location.pathname}${window.location.search}${mode === 'reel' ? '#reel' : ''}`;
@@ -34,15 +36,29 @@ export default function App() {
         setCustomLuts((old) => [...old, lut]);
         return lut;
       },
+      adopt: (incoming) => {
+        const existing = customLuts.find((l) => sameLut(l, { ...incoming, key: '' }));
+        if (existing) return existing;
+        const lut = { ...incoming, key: CUSTOM_LUT_PREFIX + uid('lut') };
+        setCustomLuts((old) => [...old, lut]);
+        return lut;
+      },
       remove: (key) => setCustomLuts((old) => old.filter((l) => l.key !== key)),
     }),
     [customLuts, get],
   );
 
+  // A preset opens in the editor it was saved from.
+  const onPreset = useCallback((preset: Preset | null) => {
+    setPendingPreset(preset);
+    if (preset) setMode(preset.mode);
+  }, []);
+
+  const shared = { mode, onModeChange: setMode, luts, pendingPreset, onPreset };
   return (
     <>
-      <CoverApp active={mode === 'cover'} mode={mode} onModeChange={setMode} luts={luts} />
-      <ReelApp active={mode === 'reel'} mode={mode} onModeChange={setMode} luts={luts} />
+      <CoverApp active={mode === 'cover'} {...shared} />
+      <ReelApp active={mode === 'reel'} {...shared} />
     </>
   );
 }
